@@ -54,7 +54,7 @@ AI-generated follow-up tasks contain exactly one `choice`, one `fill_blank`, and
 
 ### Adaptive Item Formats and Sources
 
-`projective_slider` presents an original, symmetric abstract cue card next to a consumption-relevant approach-versus-pause continuum. It is visually inspired by the broad use of ambiguous stimuli in psychological research, but it is **not a Rorschach test**: it does not reproduce Rorschach material, administer its procedure, use its norms, or make clinical or personality-diagnostic claims. It is an exploratory measure of a momentary approach/pause response, not a validated diagnostic instrument.
+`projective_slider` creates a unique, original SVG form for each generated task and persists it in the `roey-ai-is-store` R2 bucket. The task record retains the opaque image ID, so the same task always shows the same stimulus while different tasks receive different imagery. It first asks the participant for a short free association—what the form resembles or brings to mind—then asks them to locate their likely response to an unexpected offer on an approach-versus-pause continuum. The free association is retained as qualitative evidence; the slider contributes the structured, momentary response measure. This format is visually inspired by the broad use of ambiguous stimuli in psychological research, but it is **not a Rorschach test**: it does not reproduce Rorschach material, administer its procedure, use its norms, or make clinical or personality-diagnostic claims. It is exploratory rather than a validated diagnostic instrument.
 
 The generator can cite only the following source identifiers, which are stored with the generated task:
 

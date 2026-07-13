@@ -923,86 +923,53 @@ label textarea,
   position: relative;
   display: grid;
   place-items: end center;
-  min-height: 136px;
+  min-height: 190px;
+  margin: 0;
   overflow: hidden;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background:
-    radial-gradient(circle at 50% 45%, var(--surface-dark) 0 15%, transparent 16%),
+    radial-gradient(circle at 50% 45%, var(--surface-dark) 0 22%, transparent 23%),
     linear-gradient(135deg, var(--surface), var(--surface-subtle));
 }
 
-.projective-cue-card::before,
-.projective-cue-card::after,
-.projective-ink {
-  position: absolute;
+.projective-stimulus-image,
+.projective-stimulus-pending {
+  width: min(100%, 420px);
+  height: 170px;
+  object-fit: contain;
+}
+
+.projective-stimulus-image {
+  filter: drop-shadow(0 3px 6px color-mix(in srgb, var(--surface-dark) 70%, transparent));
+}
+
+.projective-stimulus-pending {
   display: block;
-  content: "";
-  background: var(--accent-soft);
-  border: 1px solid var(--line-strong);
-  opacity: 0.9;
-}
-
-.projective-cue-card::before {
-  width: 58px;
-  height: 78px;
-  top: 22px;
-  left: calc(50% - 66px);
-  border-radius: 64% 36% 58% 42%;
-  transform: rotate(-24deg);
-  box-shadow: 74px 0 0 var(--accent-soft), 74px 0 0 1px var(--line-strong);
-}
-
-.projective-cue-card::after {
-  width: 32px;
-  height: 32px;
-  top: 52px;
-  left: calc(50% - 16px);
-  border-radius: 50% 45% 54% 46%;
-  transform: rotate(30deg);
-}
-
-.projective-ink-one {
-  width: 26px;
-  height: 22px;
-  top: 28px;
-  left: calc(50% - 25px);
-  border-radius: 70% 30% 55% 45%;
-  box-shadow: 24px 0 0 var(--accent-soft), 24px 0 0 1px var(--line-strong);
-}
-
-.projective-ink-two {
-  width: 18px;
-  height: 28px;
-  top: 84px;
-  left: calc(50% - 47px);
-  border-radius: 30% 70% 45% 55%;
-  transform: rotate(-30deg);
-  box-shadow: 76px 0 0 var(--accent-soft), 76px 0 0 1px var(--line-strong);
-}
-
-.projective-ink-three {
-  width: 14px;
-  height: 14px;
-  top: 18px;
-  left: calc(50% - 8px);
-  border-radius: 50%;
-}
-
-.projective-ink-four {
-  width: 20px;
-  height: 14px;
-  top: 104px;
-  left: calc(50% - 10px);
-  border-radius: 60% 40% 65% 35%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 68%);
+  opacity: 0.45;
 }
 
 .projective-cue-card small {
   position: relative;
   z-index: 1;
+  margin-top: -25px;
   color: var(--text-active);
   font-weight: 650;
+}
+
+.projective-association {
+  display: grid;
+  gap: 6px;
+  color: var(--text-active);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.projective-association-input {
+  min-height: 72px;
+  font-weight: 400;
 }
 
 .projective-slider-labels,

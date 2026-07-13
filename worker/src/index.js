@@ -29,6 +29,7 @@ const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const SUPERADMIN_ID = "root";
 const AI_DYNAMIC_TASK_LIMIT = 5;
 const AI_DYNAMIC_TASK_PREFIX = "ai_dynamic:";
+const STIMULUS_IMAGE_PREFIX = "stimuli/free-association/";
 const ADAPTIVE_SOURCE_CATALOG = [
   {
     id: "consumer_impulse",
@@ -93,6 +94,7 @@ async function handleApi(request, env, url) {
 
   const route = `${request.method} ${url.pathname}`;
   const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+  const stimulusImageMatch = url.pathname.match(/^\/api\/stimuli\/([0-9a-f-]{36})$/i);
   const counselorCaseMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)$/);
   const counselorMessageMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)\/message$/);
   const counselorStrategyMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)\/strategy$/);
@@ -106,6 +108,9 @@ async function handleApi(request, env, url) {
   if (route === "GET /api/history") return history(request, env);
   if (route === "POST /api/chat") return chat(request, env);
   if (route === "GET /api/tasks") return tasks(request, env, url);
+  if (request.method === "GET" && stimulusImageMatch) {
+    return serveStimulusImage(env, stimulusImageMatch[1].toLowerCase());
+  }
   if (request.method === "POST" && taskMatch) {
     return submitTask(request, env, decodeURIComponent(taskMatch[1]));
   }
@@ -320,7 +325,7 @@ async function buildParticipantTaskCatalog({ env, userId, language, context, pro
   const hasBaseline = context.events.some((event) => event.task_key === "cue_triage");
   if (!hasBaseline) return baseTasks;
 
-  const generatedTasks = await loadGeneratedTasks(env, userId);
+  const generatedTasks = await ensureGeneratedTaskStimuli(env, userId, await loadGeneratedTasks(env, userId));
   const generatedCatalogTasks = generatedTasks.map((item) => publicGeneratedTask(item.task, language));
   const pending = generatedTasks.find((item) => item.status === "pending");
   if (pending?.task) return [...baseTasks, ...generatedCatalogTasks];
@@ -363,6 +368,7 @@ async function createAiDynamicTask({ env, userId, language, context, profile, ai
     questionIndex,
     focusMetrics,
   });
+  await attachProjectiveStimulusImage(env, task);
   const now = new Date().toISOString();
   await env.d1.prepare(
     `INSERT INTO generated_tasks (task_key, user_id, status, task_json, source_json, created_at, completed_at)
@@ -380,6 +386,9 @@ async function createAiDynamicTask({ env, userId, language, context, profile, ai
         focusMetrics,
         generationVersion: task.research?.generationVersion || "bilingual-adaptive-v3",
         model: aiSettings.model,
+        stimulusImageIds: task.items
+          .filter((item) => item.type === "projective_slider")
+          .map((item) => item.stimulus_image_id),
       }),
       now,
     )
@@ -409,7 +418,7 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
     "The English and Chinese versions must describe the same situation, choice meaning, and response scope.",
     "Do not translate or alter option keys, tags, metrics, or their ordering between languages.",
     "The task must be research-oriented but is not a diagnosis or a standardized clinical test.",
-    "The projective_slider is an original abstract-cue response task, not a Rorschach test: do not use Rorschach images, norms, terminology, or clinical claims.",
+    "The projective_slider is an original free-association response to an ambiguous, symmetric form. It must first invite a brief open-ended description of what the participant sees or feels, then ask for an approach-versus-pause position in a relevant unexpected-offer moment. It is not a Rorschach test: do not use Rorschach images, norms, terminology, or clinical claims.",
     "Schema:",
     JSON.stringify({
       title_en: "short English task title",
@@ -459,10 +468,14 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
         },
         {
           type: "projective_slider",
-          prompt_en: "an indirect English prompt about an original abstract cue card and an unplanned consumption moment",
+          prompt_en: "an English prompt asking for a first free association from the pictured ambiguous form, then a response to an unexpected offer",
           prompt_zh: "对应的简体中文题干",
-          stimulus_en: "short English label for the abstract symmetric cue card",
-          stimulus_zh: "对应的简体中文线索卡标签",
+          stimulus_en: "a short, neutral English label for a free-association shape",
+          stimulus_zh: "对应的简体中文中性图形联想标签",
+          association_prompt_en: "short English instruction asking what the form first resembles or brings to mind",
+          association_prompt_zh: "对应的简体中文联想作答提示",
+          association_placeholder_en: "short English free-association answer placeholder",
+          association_placeholder_zh: "对应的简体中文联想作答占位提示",
           left_anchor_en: "a reflective, delay-oriented endpoint",
           left_anchor_zh: "对应的反思/延迟端点",
           right_anchor_en: "an immediate, approach-oriented endpoint",
@@ -492,7 +505,7 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
     "Produce exactly one choice, one fill_blank, and one projective_slider item.",
     "Choice items must have exactly 4 options with keys A, B, C, D.",
     "Fill_blank items must include both language placeholders, tag, and metrics. They must be answerable in one short sentence.",
-    "Projective_slider items must include the bilingual abstract-cue label and anchors, low_tag, high_tag, metrics_low, and metrics_high. It records an immediate approach-versus-pause position from 0 to 100; it must not make personality or clinical claims.",
+    "Projective_slider items must include the bilingual free-association shape label, association prompt and placeholder, anchors, low_tag, high_tag, metrics_low, and metrics_high. The free association is qualitative evidence; the 0-to-100 slider records an immediate approach-versus-pause position. It must not make personality or clinical claims.",
     `source_ids must contain one or two IDs from this catalog only: ${JSON.stringify(ADAPTIVE_SOURCE_CATALOG)}.`,
     "Reject the task yourself if any required English or Simplified Chinese text is missing.",
     "Each metrics value must be an integer from 0 to 100.",
@@ -556,7 +569,7 @@ function normalizeGeneratedTaskData(data, taskKey, questionIndex, focusMetrics) 
     theory_zh: theory.zh,
     aiGenerated: true,
     research: {
-      generationVersion: "bilingual-adaptive-v3",
+      generationVersion: "bilingual-adaptive-v4",
       focusMetrics: [...focusMetrics],
       questionIndex,
       sourceIds: normalizeSourceIds(data.source_ids),
@@ -588,13 +601,19 @@ function normalizeGeneratedItem(item, index) {
   }
 
   if (type === "projective_slider") {
-    const stimulus = requireBilingualText(item, "stimulus", "AI dynamic abstract cue label");
+    const stimulus = requireBilingualText(item, "stimulus", "AI dynamic free-association shape label");
+    const associationPrompt = requireBilingualText(item, "association_prompt", "AI dynamic free-association prompt");
+    const associationPlaceholder = requireBilingualText(item, "association_placeholder", "AI dynamic free-association placeholder");
     const leftAnchor = requireBilingualText(item, "left_anchor", "AI dynamic slider left anchor");
     const rightAnchor = requireBilingualText(item, "right_anchor", "AI dynamic slider right anchor");
     return {
       ...base,
       stimulus: stimulus.en.slice(0, 180),
       stimulus_zh: stimulus.zh.slice(0, 180),
+      association_prompt: associationPrompt.en.slice(0, 180),
+      association_prompt_zh: associationPrompt.zh.slice(0, 180),
+      association_placeholder: associationPlaceholder.en.slice(0, 120),
+      association_placeholder_zh: associationPlaceholder.zh.slice(0, 120),
       left_anchor: leftAnchor.en.slice(0, 120),
       left_anchor_zh: leftAnchor.zh.slice(0, 120),
       right_anchor: rightAnchor.en.slice(0, 120),
@@ -678,14 +697,18 @@ function buildFallbackProjectiveSliderItem(questionIndex, index) {
     key: `q${index + 1}`,
     index: index + 1,
     type: "projective_slider",
-    prompt: "Look at this original abstract cue card as if it briefly appeared beside an unplanned offer. Place the marker where your first impulse would land.",
-    prompt_zh: "把这张原创抽象线索卡想象成短暂出现在一个计划外优惠旁边。请标出你第一反应会落在哪里。",
-    stimulus: "Symmetric abstract cue card",
-    stimulus_zh: "对称抽象线索卡",
-    left_anchor: "Pause and check what matters",
-    left_anchor_zh: "先停一下，核对真正重要的事",
-    right_anchor: "Move toward it now",
-    right_anchor_zh: "现在就靠近它",
+    prompt: "Look at the form for a few seconds. Write the first thing, scene, or feeling it brings to mind. Then imagine an unexpected offer appears and place the marker where your first response would land.",
+    prompt_zh: "先安静看图几秒。请写下它让你最先想到的人、物、场景或感受；然后想象一个计划外优惠突然出现，标出你此刻最初的反应会落在哪里。",
+    stimulus: "Free-association shape",
+    stimulus_zh: "开放式图形联想",
+    association_prompt: "What does this form first resemble or bring to mind?",
+    association_prompt_zh: "这幅图形第一眼像什么，或让你想到什么？",
+    association_placeholder: "Write a short first impression",
+    association_placeholder_zh: "写下你的第一联想",
+    left_anchor: "I would pause and check what I need",
+    left_anchor_zh: "我会先停一下，想想自己是否真的需要",
+    right_anchor: "I would move toward it right away",
+    right_anchor_zh: "我会立刻靠近它",
     low_tag: `reflective_pause_${questionIndex}`,
     high_tag: `immediate_approach_${questionIndex}`,
     metrics_low: normalizeMetricMap({ cue_drive: 24, emotion_relief: 30, social_pull: 36, present_bias: 20, planning_strength: 82, help_readiness: 56 }),
@@ -722,6 +745,9 @@ function publicGeneratedTask(task, language) {
       prompt: selectGeneratedText(item.prompt, item.prompt_zh, language),
       placeholder: selectGeneratedText(item.placeholder, item.placeholder_zh, language),
       stimulus: selectGeneratedText(item.stimulus, item.stimulus_zh, language),
+      stimulusImageUrl: item.stimulus_image_id ? `/api/stimuli/${item.stimulus_image_id}` : "",
+      associationPrompt: selectGeneratedText(item.association_prompt, item.association_prompt_zh, language),
+      associationPlaceholder: selectGeneratedText(item.association_placeholder, item.association_placeholder_zh, language),
       leftAnchor: selectGeneratedText(item.left_anchor, item.left_anchor_zh, language),
       rightAnchor: selectGeneratedText(item.right_anchor, item.right_anchor_zh, language),
       options: (item.options || []).map((option) => ({
@@ -730,6 +756,116 @@ function publicGeneratedTask(task, language) {
       })),
     })),
   };
+}
+
+async function ensureGeneratedTaskStimuli(env, userId, generatedTasks) {
+  for (const generatedTask of generatedTasks) {
+    if (!hasProjectiveItemWithoutStimulus(generatedTask.task)) continue;
+    await attachProjectiveStimulusImage(env, generatedTask.task);
+    await env.d1.prepare(
+      "UPDATE generated_tasks SET task_json = ? WHERE user_id = ? AND task_key = ?",
+    )
+      .bind(JSON.stringify(generatedTask.task), userId, generatedTask.taskKey)
+      .run();
+  }
+  return generatedTasks;
+}
+
+function hasProjectiveItemWithoutStimulus(task) {
+  return (task?.items || []).some((item) => item.type === "projective_slider" && !item.stimulus_image_id);
+}
+
+async function attachProjectiveStimulusImage(env, task) {
+  const projectiveItems = (task?.items || []).filter(
+    (item) => item.type === "projective_slider" && !item.stimulus_image_id,
+  );
+  for (const item of projectiveItems) {
+    const imageId = crypto.randomUUID();
+    await env.r2.put(stimulusImageObjectKey(imageId), createProjectiveStimulusSvg(imageId), {
+      httpMetadata: {
+        contentType: "image/svg+xml; charset=utf-8",
+        cacheControl: "public, max-age=31536000, immutable",
+      },
+    });
+    item.stimulus_image_id = imageId;
+  }
+}
+
+async function serveStimulusImage(env, imageId) {
+  const image = await env.r2.get(stimulusImageObjectKey(imageId));
+  if (!image) return new Response("Not found", { status: 404 });
+  return new Response(image.body, {
+    headers: {
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
+      "content-type": "image/svg+xml; charset=utf-8",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+function stimulusImageObjectKey(imageId) {
+  return `${STIMULUS_IMAGE_PREFIX}${imageId}.svg`;
+}
+
+function createProjectiveStimulusSvg(seed) {
+  const random = seededRandom(seed);
+  const hue = Math.round(205 + random() * 36);
+  const accentHue = Math.round(188 + random() * 42);
+  const centerX = 400;
+  const leftShapes = Array.from({ length: 6 + Math.floor(random() * 4) }, () => {
+    const x = Math.round(120 + random() * 230);
+    const y = Math.round(62 + random() * 345);
+    const width = Math.round(26 + random() * 86);
+    const height = Math.round(22 + random() * 82);
+    const curve = Math.round(0.28 * width + random() * 0.55 * width);
+    const tilt = Math.round(-38 + random() * 76);
+    return `<path d="M ${x} ${y} C ${x - curve} ${y + height * 0.16} ${x - width} ${y + height * 0.47} ${x - width * 0.54} ${y + height} C ${x - width * 0.08} ${y + height * 1.2} ${x + width * 0.25} ${y + height * 0.72} ${x + width * 0.08} ${y + height * 0.3} C ${x + width * 0.28} ${y + height * 0.02} ${x + curve} ${y - height * 0.2} ${x} ${y} Z" transform="rotate(${tilt} ${x} ${y})" />`;
+  }).join("");
+  const droplets = Array.from({ length: 3 + Math.floor(random() * 4) }, () => {
+    const cx = Math.round(148 + random() * 180);
+    const cy = Math.round(58 + random() * 362);
+    const radius = Math.round(5 + random() * 18);
+    return `<circle cx="${cx}" cy="${cy}" r="${radius}" />`;
+  }).join("");
+  const centerMarks = Array.from({ length: 2 + Math.floor(random() * 3) }, () => {
+    const y = Math.round(90 + random() * 280);
+    const rx = Math.round(8 + random() * 24);
+    const ry = Math.round(12 + random() * 42);
+    return `<ellipse cx="${centerX}" cy="${y}" rx="${rx}" ry="${ry}" />`;
+  }).join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" role="img" aria-label="Original abstract free-association form"><defs><radialGradient id="glow" cx="50%" cy="46%" r="62%"><stop offset="0" stop-color="#${hslToHex(hue, 43, 20)}"/><stop offset="1" stop-color="#030507"/></radialGradient><linearGradient id="ink" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#${hslToHex(hue, 58, 43)}"/><stop offset="1" stop-color="#${hslToHex(accentHue, 48, 26)}"/></linearGradient></defs><rect width="800" height="480" fill="url(#glow)"/><g fill="url(#ink)" fill-opacity=".78" stroke="#${hslToHex(hue, 24, 68)}" stroke-opacity=".62" stroke-width="2">${leftShapes}${droplets}<g transform="translate(800 0) scale(-1 1)">${leftShapes}${droplets}</g></g><g fill="#${hslToHex(accentHue, 39, 47)}" fill-opacity=".6" stroke="#${hslToHex(hue, 20, 72)}" stroke-opacity=".5" stroke-width="1.5">${centerMarks}</g><path d="M 400 60 C ${Math.round(386 + random() * 9)} 170 ${Math.round(414 - random() * 9)} 310 400 420" fill="none" stroke="#${hslToHex(hue, 22, 68)}" stroke-opacity=".58" stroke-width="2"/></svg>`;
+}
+
+function seededRandom(seed) {
+  let state = 2166136261;
+  for (const character of seed) {
+    state ^= character.charCodeAt(0);
+    state = Math.imul(state, 16777619);
+  }
+  return () => {
+    state += 0x6d2b79f5;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hslToHex(hue, saturation, lightness) {
+  const chroma = (1 - Math.abs(2 * (lightness / 100) - 1)) * (saturation / 100);
+  const segment = hue / 60;
+  const secondary = chroma * (1 - Math.abs((segment % 2) - 1));
+  const [red, green, blue] = segment < 1 ? [chroma, secondary, 0]
+    : segment < 2 ? [secondary, chroma, 0]
+      : segment < 3 ? [0, chroma, secondary]
+        : segment < 4 ? [0, secondary, chroma]
+          : segment < 5 ? [secondary, 0, chroma]
+            : [chroma, 0, secondary];
+  const offset = lightness / 100 - chroma / 2;
+  return [red, green, blue]
+    .map((channel) => Math.round((channel + offset) * 255).toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function selectGeneratedText(english, chinese, language) {

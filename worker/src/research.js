@@ -1130,9 +1130,13 @@ export function scoreGeneratedMicroTask(task, payload, language) {
     if (item.type === "projective_slider") {
       const position = Number(value);
       if (!Number.isInteger(position) || position < 0 || position > 100) {
-        throw new TaskInputError(lang === "zh" ? "请在抽象线索卡上标出你的第一反应。" : "Please mark your first response on the abstract cue card.");
+        throw new TaskInputError(lang === "zh" ? "请标出你在这个情境中的第一反应。" : "Please mark your first response to this situation.");
       }
-      selections[item.key] = position;
+      const association = String(payload?.[`${item.key}_association`] || "").replace(/\s+/g, " ").trim().slice(0, 500);
+      if (!association) {
+        throw new TaskInputError(lang === "zh" ? "请先写下你对图形的第一联想。" : "Please first write your initial association with the form.");
+      }
+      selections[item.key] = { association, position };
       const ratio = position / 100;
       for (const key of METRIC_KEYS) {
         const low = Number(item.metrics_low?.[key] ?? 50);

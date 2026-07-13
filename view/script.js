@@ -880,15 +880,31 @@ function renderMicroChoiceItemControl(item) {
   }
 
   if (item.type === "projective_slider") {
+    const associationPrompt = item.associationPrompt || (state.language === "zh"
+      ? "这幅图形第一眼像什么，或让你想到什么？"
+      : "What does this form first resemble or bring to mind?");
+    const associationPlaceholder = item.associationPlaceholder || (state.language === "zh"
+      ? "写下你的第一联想"
+      : "Write a short first impression");
     return `
       <div class="projective-response">
-        <div class="projective-cue-card" role="img" aria-label="${escapeHtml(item.stimulus || item.prompt)}">
-          <span class="projective-ink projective-ink-one"></span>
-          <span class="projective-ink projective-ink-two"></span>
-          <span class="projective-ink projective-ink-three"></span>
-          <span class="projective-ink projective-ink-four"></span>
+        <figure class="projective-cue-card" role="img" aria-label="${escapeHtml(item.stimulus || item.prompt)}">
+          ${item.stimulusImageUrl
+            ? `<img class="projective-stimulus-image" src="${escapeHtml(item.stimulusImageUrl)}" alt="" />`
+            : "<span class=\"projective-stimulus-pending\" aria-hidden=\"true\"></span>"}
           <small>${escapeHtml(item.stimulus || "Abstract cue card")}</small>
-        </div>
+        </figure>
+        <label class="projective-association">
+          <span>${escapeHtml(associationPrompt)}</span>
+          <textarea
+            class="generated-answer projective-association-input"
+            data-projective-association
+            name="${escapeHtml(`${item.key}_association`)}"
+            rows="2"
+            maxlength="500"
+            placeholder="${escapeHtml(associationPlaceholder)}"
+            required></textarea>
+        </label>
         <div class="projective-slider-labels">
           <span>${escapeHtml(item.leftAnchor || "Pause and check")}</span>
           <span>${escapeHtml(item.rightAnchor || "Move toward it now")}</span>
@@ -1333,10 +1349,18 @@ function serializeTaskForm(form, taskKey) {
   if (form.querySelector("[data-choice-key]")) {
     return Object.fromEntries(
       [...form.querySelectorAll("[data-choice-key]")]
-        .map((node) => {
+        .flatMap((node) => {
           const key = node.dataset.choiceKey;
+          const associationControl = node.querySelector("[data-projective-association]");
+          const sliderControl = node.querySelector("input[type='range']");
+          if (associationControl && sliderControl) {
+            return [
+              [key, sliderControl.value.trim()],
+              [`${key}_association`, associationControl.value.trim()],
+            ];
+          }
           const textControl = node.querySelector("textarea, input[type='text'], input[type='range']");
-          return [key, textControl ? textControl.value.trim() : selectedRadioValue(form, key)];
+          return [[key, textControl ? textControl.value.trim() : selectedRadioValue(form, key)]];
         }),
     );
   }
