@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AgentIS">
+  <style>
+    .tile {
+      fill: #ffffff;
+      stroke: #afafaf;
+    }
+
+    .letter {
+      fill: #000000;
+      font-family: Inter, Aptos, "Segoe UI", Arial, sans-serif;
+      font-size: 46px;
+      font-weight: 700;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .tile {
+        fill: #000000;
+        stroke: #787878;
+      }
+
+      .letter {
+        fill: #ffffff;
+      }
+    }
+  </style>
+  <rect class="tile" x="1.5" y="1.5" width="61" height="61" rx="14" />
+  <text class="letter" x="32" y="49" text-anchor="middle">A</text>
+</svg>

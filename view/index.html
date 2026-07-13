@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentIS</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/agentis-favicon.svg" />
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem("agentis_theme");
+        const theme =
+          savedTheme === "dark" || savedTheme === "light"
+            ? savedTheme
+            : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brandlock">
+          <span class="brandmark">A</span>
+          <div>
+            <p class="eyebrow" data-i18n="heroEyebrow">CHI 2027 research prototype</p>
+            <h1 data-i18n="appTitle">AgentIS</h1>
+          </div>
+        </div>
+        <div class="utility-row">
+          <label class="utility-field">
+            <span data-i18n="theme">Theme</span>
+            <select id="themeSelect" aria-label="Theme">
+              <option value="light" data-i18n="themeLight">Light</option>
+              <option value="dark" data-i18n="themeDark">Dark</option>
+            </select>
+          </label>
+          <label class="utility-field">
+            <span data-i18n="language">Language</span>
+            <select id="languageSelect" aria-label="Language">
+              <option value="zh">简体中文</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <section class="auth-view" id="authView">
+        <div class="hero-column">
+          <p class="eyebrow" data-i18n="heroEyebrow">CHI 2027 research prototype</p>
+          <h2 data-i18n="heroTitle">
+            Indirect sensing for overspending with counselor handoff
+          </h2>
+          <p class="hero-copy" data-i18n="heroBody">
+            AgentIS replaces direct questionnaires with illustrated cues, budgeting games, delay ladders, and a shared counselor-supported intervention thread.
+          </p>
+          <div class="hero-grid">
+            <article class="hero-card">
+              <h3 data-i18n="heroPoint1Title">Multimodal Detection</h3>
+              <p data-i18n="heroPoint1Body">
+                Illustrated scenarios, token allocation, and activity-based sensing instead of blunt self-report.
+              </p>
+            </article>
+            <article class="hero-card">
+              <h3 data-i18n="heroPoint2Title">Theory Grounded</h3>
+              <p data-i18n="heroPoint2Body">
+                Cue-reactivity, delay discounting, implementation intentions, and stepped-care escalation.
+              </p>
+            </article>
+            <article class="hero-card">
+              <h3 data-i18n="heroPoint3Title">Original Visualization</h3>
+              <p data-i18n="heroPoint3Body">
+                An intervention bloom and milestone ladder make the negative pattern and progress visible over time.
+              </p>
+            </article>
+          </div>
+        </div>
+
+        <form class="auth-card" id="authForm">
+          <div class="tab-row" role="tablist" aria-label="Auth mode">
+            <button type="button" class="tab active" data-mode="login" data-i18n="login">Login</button>
+            <button type="button" class="tab" data-mode="register" data-i18n="register">Register</button>
+          </div>
+          <label>
+            <span data-i18n="userId">User ID</span>
+            <input id="userIdInput" autocomplete="username" required />
+          </label>
+          <label>
+            <span data-i18n="password">Password</span>
+            <input id="passwordInput" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="primary-button" type="submit" id="authSubmit" data-i18n="login">Login</button>
+          <p class="form-message neutral" id="authMessage" data-i18n="authMessageDefault">
+            No default accounts. Register user ID root to create the super administrator.
+          </p>
+        </form>
+      </section>
+
+      <section class="workspace hidden" id="participantView">
+        <header class="workspace-head">
+          <div class="headline-block">
+            <p class="eyebrow" data-i18n="currentUser">Current user</p>
+            <h2 id="participantUserId">-</h2>
+          </div>
+          <div class="workspace-badges">
+            <span class="status-chip" id="riskBadge">-</span>
+            <span class="status-chip" id="stageBadge">-</span>
+            <span class="status-chip" id="careBadge">-</span>
+          </div>
+          <div class="workspace-actions">
+            <button class="ghost-button" type="button" id="askCounselorButton" data-i18n="askCounselor">Invite Counselor</button>
+            <button class="ghost-button" type="button" id="exportButton" data-i18n="exportStudy">Export Study Pack</button>
+            <button class="ghost-button" type="button" id="logoutButton" data-i18n="logout">Logout</button>
+          </div>
+        </header>
+
+        <section class="focus-panel">
+          <div class="focus-copy">
+            <p class="eyebrow" data-i18n="currentFocus">Current focus</p>
+            <h3 id="focusTitle">-</h3>
+            <p id="focusBody">-</p>
+          </div>
+          <div class="focus-metrics">
+            <div>
+              <span data-i18n="taskProgress">Task progress</span>
+              <strong id="focusTaskCount">-</strong>
+            </div>
+            <div>
+              <span data-i18n="risk">Risk</span>
+              <strong id="focusRisk">-</strong>
+            </div>
+            <div>
+              <span data-i18n="careStatus">Care status</span>
+              <strong id="focusCare">-</strong>
+            </div>
+          </div>
+          <div class="focus-actions">
+            <button class="primary-button" type="button" id="focusPrimaryButton" data-i18n="startFocus">Start focus</button>
+            <button class="ghost-button" type="button" id="focusThreadButton" data-i18n="openThread">Open thread</button>
+          </div>
+        </section>
+
+        <nav class="workspace-nav" aria-label="Participant workspace">
+          <button class="workspace-tab active" type="button" data-workspace-target="overview" data-i18n="workspaceOverview">Overview</button>
+          <button class="workspace-tab" type="button" data-workspace-target="tasks" data-i18n="workspaceTasks">Tasks</button>
+          <button class="workspace-tab" type="button" data-workspace-target="thread" data-i18n="workspaceThread">Thread</button>
+          <button class="workspace-tab" type="button" data-workspace-target="insights" data-i18n="workspaceInsights">Insights</button>
+          <button class="workspace-tab" type="button" data-workspace-target="settings" data-i18n="workspaceSettings">Settings</button>
+        </nav>
+
+        <div class="participant-sections">
+          <section class="participant-section active" data-participant-section="overview">
+            <div class="overview-grid">
+              <section class="panel next-task-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="eyebrow" data-i18n="nextTask">Next task</p>
+                    <h3 id="nextTaskTitle">-</h3>
+                  </div>
+                  <span class="status-chip" id="nextTaskStatus">-</span>
+                </div>
+                <p id="nextTaskSummary" class="summary-text">-</p>
+                <div id="nextTaskPreview" class="next-task-preview"></div>
+                <button class="primary-button" type="button" id="openTasksButton" data-i18n="openTasks">Open Tasks</button>
+              </section>
+
+              <section class="panel overview-status-panel">
+                <div class="panel-head">
+                  <div>
+                    <p class="eyebrow" data-i18n="workspaceSummary">Workspace summary</p>
+                    <h3 data-i18n="profileSummary">Profile Summary</h3>
+                  </div>
+                </div>
+                <div class="metric-strip">
+                  <div>
+                    <span data-i18n="risk">Risk</span>
+                    <strong id="overviewRiskValue">-</strong>
+                  </div>
+                  <div>
+                    <span data-i18n="stage">Stage</span>
+                    <strong id="overviewStageValue">-</strong>
+                  </div>
+                  <div>
+                    <span data-i18n="careStatus">Care status</span>
+                    <strong id="overviewCareValue">-</strong>
+                  </div>
+                </div>
+                <p id="overviewSummaryText" class="summary-text">-</p>
+                <div class="overview-actions">
+                  <button class="ghost-button" type="button" id="overviewInsightsButton" data-i18n="reviewInsights">Review insights</button>
+                  <button class="ghost-button" type="button" id="overviewSettingsButton" data-i18n="openSettings">Open settings</button>
+                </div>
+              </section>
+
+              <section class="panel progress-panel">
+                <div class="panel-head tight">
+                  <div>
+                    <p class="eyebrow" data-i18n="progressChecklist">Progress checklist</p>
+                    <h3 data-i18n="taskProgress">Task progress</h3>
+                  </div>
+                </div>
+                <div class="task-progress-rail" id="taskProgressRail"></div>
+              </section>
+            </div>
+          </section>
+
+          <section class="participant-section" data-participant-section="tasks">
+            <section class="panel task-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow" data-i18n="taskLab">Task Lab</p>
+                  <h3 data-i18n="taskLab">Task Lab</h3>
+                </div>
+                <p class="panel-note" data-i18n="taskLabBody">
+                  Complete the indirect tasks below. You can repeat them to track change over time.
+                </p>
+              </div>
+              <div class="task-list" id="taskList"></div>
+            </section>
+          </section>
+
+          <section class="participant-section" data-participant-section="thread">
+            <section class="panel thread-panel">
+              <div class="panel-head tight">
+                <div>
+                  <p class="eyebrow" data-i18n="sharedThread">Shared Thread</p>
+                  <h3 data-i18n="sharedThread">Shared Thread</h3>
+                </div>
+                <span class="status-chip" id="aiStatusChip" data-i18n="notConfigured">AI not configured</span>
+              </div>
+              <p class="panel-note" data-i18n="sharedThreadBody">
+                The system and counselor can operate on the same behavioral evidence chain.
+              </p>
+
+              <div class="inline-cards">
+                <article class="mini-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="profileSummary">Profile Summary</span>
+                    <strong id="nextMoveText">-</strong>
+                  </div>
+                  <p id="profileSummaryText" class="summary-text">-</p>
+                </article>
+                <article class="mini-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="theoryLine">Theory line</span>
+                  </div>
+                  <p id="theoryLineText" class="summary-text">-</p>
+                </article>
+              </div>
+
+              <div class="message-thread" id="messageThread"></div>
+
+              <form class="composer" id="chatForm">
+                <textarea id="messageInput" rows="3" data-i18n-placeholder="chatPlaceholder" placeholder="Describe a recent shopping moment, a friction, or a progress update…"></textarea>
+                <button class="primary-button" type="submit" id="sendButton" data-i18n="send">Send</button>
+              </form>
+            </section>
+          </section>
+
+          <section class="participant-section" data-participant-section="insights">
+            <section class="panel insight-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow" data-i18n="profileSummary">Profile Summary</p>
+                  <h3 data-i18n="profileSummary">Profile Summary</h3>
+                </div>
+              </div>
+
+              <article class="mini-panel">
+                <div class="metric-strip">
+                  <div>
+                    <span data-i18n="risk">Risk</span>
+                    <strong id="riskValue">-</strong>
+                  </div>
+                  <div>
+                    <span data-i18n="stage">Stage</span>
+                    <strong id="stageValue">-</strong>
+                  </div>
+                  <div>
+                    <span data-i18n="careStatus">Care status</span>
+                    <strong id="careValue">-</strong>
+                  </div>
+                </div>
+                <p id="careReasonText" class="summary-text">-</p>
+              </article>
+
+              <div class="insight-grid">
+                <article class="visual-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="interventionBloom">Intervention Bloom</span>
+                  </div>
+                  <div id="bloomChart"></div>
+                </article>
+
+                <article class="visual-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="progressPath">Progress Path</span>
+                  </div>
+                  <div id="pathChart"></div>
+                </article>
+              </div>
+
+              <div class="insight-grid">
+                <article class="mini-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="evidenceChain">Evidence Chain</span>
+                  </div>
+                  <ul class="bullet-list" id="evidenceList"></ul>
+                </article>
+
+                <article class="mini-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="milestoneLadder">Milestone Ladder</span>
+                  </div>
+                  <div id="milestoneList"></div>
+                </article>
+              </div>
+
+              <article class="mini-panel">
+                <div class="mini-panel-head">
+                  <span data-i18n="commonSignals">Common Signals</span>
+                </div>
+                <div class="feature-list" id="featureList"></div>
+              </article>
+            </section>
+          </section>
+
+          <section class="participant-section" data-participant-section="settings">
+            <section class="panel settings-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow" data-i18n="workspaceSettings">Settings</p>
+                  <h3 data-i18n="workspaceSettings">Settings</h3>
+                </div>
+              </div>
+              <div class="settings-grid">
+                <form class="mini-panel" id="aiSettingsForm">
+                  <div class="mini-panel-head">
+                    <span data-i18n="aiSettings">AI Settings</span>
+                  </div>
+                  <label>
+                    <span data-i18n="requestUrl">Request URL</span>
+                    <input id="requestUrlInput" placeholder="https://api.deepseek.com" />
+                  </label>
+                  <label>
+                    <span data-i18n="model">Model</span>
+                    <input id="modelInput" placeholder="deepseek-chat" />
+                  </label>
+                  <label>
+                    <span data-i18n="apiKey">API key</span>
+                    <input id="apiKeyInput" autocomplete="off" />
+                  </label>
+                  <button class="primary-button" type="submit" id="saveAiButton" data-i18n="saveSettings">Save Settings</button>
+                  <p class="form-message neutral" id="aiMessage"></p>
+                </form>
+
+                <form class="mini-panel" id="passwordForm">
+                  <div class="mini-panel-head">
+                    <span data-i18n="passwordSettings">Password</span>
+                  </div>
+                  <label>
+                    <span data-i18n="currentPassword">Current password</span>
+                    <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
+                  </label>
+                  <label>
+                    <span data-i18n="newPassword">New password</span>
+                    <input id="newPasswordInput" type="password" autocomplete="new-password" required />
+                  </label>
+                  <label>
+                    <span data-i18n="confirmPassword">Confirm new password</span>
+                    <input id="confirmPasswordInput" type="password" autocomplete="new-password" required />
+                  </label>
+                  <button class="primary-button" type="submit" id="savePasswordButton" data-i18n="changePassword">Change Password</button>
+                  <p class="form-message neutral" id="passwordMessage"></p>
+                </form>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+
+      <section class="counselor hidden" id="counselorView">
+        <header class="workspace-head">
+          <div class="headline-block">
+            <p class="eyebrow" data-i18n="counselorTitle">Counselor Console</p>
+            <h2 data-i18n="counselorTitle">Counselor Console</h2>
+          </div>
+          <div class="workspace-badges counselor-stats">
+            <span class="status-chip" id="caseActiveCount">0</span>
+            <span class="status-chip" id="caseSuggestedCount">0</span>
+            <span class="status-chip" id="caseParticipantCount">0</span>
+          </div>
+          <div class="workspace-actions">
+            <button class="ghost-button" type="button" id="refreshCasesButton" data-i18n="refreshCases">Refresh Cases</button>
+            <button class="ghost-button" type="button" id="counselorLogoutButton" data-i18n="logout">Logout</button>
+          </div>
+        </header>
+
+        <div class="counselor-grid">
+          <section class="panel case-list-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow" data-i18n="caseQueue">Case Queue</p>
+                <h3 data-i18n="caseQueue">Case Queue</h3>
+              </div>
+              <p class="panel-note" data-i18n="helpNote">
+                The counselor can see the same milestones, task evidence, and support notes.
+              </p>
+            </div>
+            <div class="case-list" id="caseList"></div>
+            <div class="mini-panel hidden" id="adminUserPanel">
+              <div class="mini-panel-head">
+                <span data-i18n="accountAdmin">Account Admin</span>
+              </div>
+              <form class="admin-create-form" id="createCounselorForm">
+                <label>
+                  <span data-i18n="counselorUserId">Counselor ID</span>
+                  <input id="newCounselorIdInput" autocomplete="off" data-i18n-placeholder="counselorUserIdPlaceholder" placeholder="counselor-01" />
+                </label>
+                <label>
+                  <span data-i18n="initialPassword">Initial password</span>
+                  <input id="newCounselorPasswordInput" type="password" autocomplete="new-password" data-i18n-placeholder="initialPasswordPlaceholder" placeholder="4+ characters" />
+                </label>
+                <button class="primary-button" type="submit" id="createCounselorButton" data-i18n="createCounselor">Create Counselor</button>
+                <p class="form-message neutral" id="createCounselorMessage"></p>
+              </form>
+              <div class="admin-user-list" id="adminUserList"></div>
+            </div>
+          </section>
+
+          <section class="panel case-detail-panel">
+            <div id="emptyCaseState" class="empty-state" data-i18n="noCaseSelected">
+              Select a participant from the queue.
+            </div>
+
+            <div class="hidden" id="caseDetail">
+              <div class="panel-head tight">
+                <div>
+                  <p class="eyebrow" data-i18n="openCase">Open Case</p>
+                  <h3 id="caseUserId">-</h3>
+                </div>
+                <div class="workspace-badges">
+                  <span class="status-chip" id="caseRiskBadge">-</span>
+                  <span class="status-chip" id="caseStageBadge">-</span>
+                  <span class="status-chip" id="caseStatusBadge">-</span>
+                </div>
+              </div>
+
+              <article class="mini-panel">
+                <p id="caseSummaryText" class="summary-text">-</p>
+              </article>
+
+              <div class="counselor-visuals">
+                <article class="visual-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="interventionBloom">Intervention Bloom</span>
+                  </div>
+                  <div id="counselorBloomChart"></div>
+                </article>
+                <article class="visual-panel">
+                  <div class="mini-panel-head">
+                    <span data-i18n="progressPath">Progress Path</span>
+                  </div>
+                  <div id="counselorPathChart"></div>
+                </article>
+              </div>
+
+              <article class="mini-panel">
+                <div class="mini-panel-head">
+                  <span data-i18n="taskEvents">Task Events</span>
+                </div>
+                <ul class="bullet-list" id="caseTaskEvents"></ul>
+              </article>
+
+              <article class="mini-panel">
+                <div class="mini-panel-head">
+                  <span data-i18n="caseThread">Case Thread</span>
+                </div>
+                <div class="message-thread compact" id="caseMessageThread"></div>
+              </article>
+
+              <form class="mini-panel" id="counselorMessageForm">
+                <div class="mini-panel-head">
+                  <span data-i18n="sendCounselor">Send Message</span>
+                </div>
+                <textarea id="counselorMessageInput" rows="3" data-i18n-placeholder="counselorMessagePlaceholder" placeholder="Send a note to the participant’s shared thread…"></textarea>
+                <button class="primary-button" type="submit" id="sendCounselorButton" data-i18n="sendCounselor">Send Message</button>
+                <p class="form-message neutral" id="counselorMessageFeedback"></p>
+              </form>
+
+              <form class="mini-panel" id="counselorStrategyForm">
+                <div class="mini-panel-head">
+                  <span data-i18n="strategy">Counselor Strategy</span>
+                </div>
+                <textarea id="counselorStrategyInput" rows="4" data-i18n-placeholder="strategyPlaceholder" placeholder="Write how the support strategy should adapt or when to hand off more strongly."></textarea>
+                <label>
+                  <span data-i18n="careStatus">Care status</span>
+                  <select id="counselorStatusSelect">
+                    <option value="watch" data-i18n="statusWatch">Watch</option>
+                    <option value="suggested" data-i18n="statusSuggested">Suggested handoff</option>
+                    <option value="active" data-i18n="statusActive">Counselor active</option>
+                    <option value="resolved" data-i18n="statusResolved">Resolved</option>
+                  </select>
+                </label>
+                <button class="primary-button" type="submit" id="saveStrategyButton" data-i18n="saveStrategy">Save Strategy</button>
+                <p class="form-message neutral" id="strategyFeedback"></p>
+              </form>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./script.js"></script>
+  </body>
+</html>

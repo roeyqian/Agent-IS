@@ -1,0 +1,8 @@
+worker/node_modules/
+worker/.wrangler/
+.idea
+desktop.ini
+.DS_Store
+.wrangler
+wrangler.jsonc
+test
