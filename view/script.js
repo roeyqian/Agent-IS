@@ -582,6 +582,10 @@ async function handleTaskSubmit(event) {
 }
 
 function handleTaskInput(event) {
+  if (event.target.matches(".projective-slider")) {
+    const output = event.target.closest(".projective-slider-control")?.querySelector("[data-projective-value]");
+    if (output) output.textContent = event.target.value;
+  }
   const form = event.target.closest("form[data-task-key='budget_arc']");
   if (!form) return;
   const total = ["immediate", "social", "comfort", "buffer", "future"]
@@ -872,6 +876,28 @@ function renderMicroChoiceItemControl(item) {
         placeholder="${escapeHtml(item.placeholder || "")}"
         required></textarea>
       ${renderBilingualSupport(item.placeholderSecondary, "generated-answer-translation")}
+    `;
+  }
+
+  if (item.type === "projective_slider") {
+    return `
+      <div class="projective-response">
+        <div class="projective-cue-card" role="img" aria-label="${escapeHtml(item.stimulus || item.prompt)}">
+          <span class="projective-ink projective-ink-one"></span>
+          <span class="projective-ink projective-ink-two"></span>
+          <span class="projective-ink projective-ink-three"></span>
+          <span class="projective-ink projective-ink-four"></span>
+          <small>${escapeHtml(item.stimulus || "Abstract cue card")}</small>
+        </div>
+        <div class="projective-slider-labels">
+          <span>${escapeHtml(item.leftAnchor || "Pause and check")}</span>
+          <span>${escapeHtml(item.rightAnchor || "Move toward it now")}</span>
+        </div>
+        <div class="projective-slider-control">
+          <input class="projective-slider" type="range" name="${escapeHtml(item.key)}" min="0" max="100" step="1" value="50" aria-label="${escapeHtml(item.prompt)}" required />
+          <output data-projective-value>50</output>
+        </div>
+      </div>
     `;
   }
 
@@ -1309,7 +1335,7 @@ function serializeTaskForm(form, taskKey) {
       [...form.querySelectorAll("[data-choice-key]")]
         .map((node) => {
           const key = node.dataset.choiceKey;
-          const textControl = node.querySelector("textarea, input[type='text']");
+          const textControl = node.querySelector("textarea, input[type='text'], input[type='range']");
           return [key, textControl ? textControl.value.trim() : selectedRadioValue(form, key)];
         }),
     );

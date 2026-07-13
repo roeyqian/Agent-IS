@@ -9,10 +9,10 @@ AgentIS is a brand-new Cloudflare Workers research prototype for **indirectly de
 The old app relied too heavily on direct conversation and questionnaire-like prompts. This new version implements the advisor feedback as a fresh system with three concrete research moves:
 
 1. **Indirect multimodal detection**
-   - `Life Preference Portrait`: 10 original everyday scenario choices instead of blunt self-report or shopping-specific prompts.
+   - `Life Preference Portrait`: 8 original everyday scenario choices plus 2 short written continuations, rather than a blunt self-report battery.
    - `Budget Arc`: token allocation across reward, comfort, social, buffer, and future jars.
    - `Horizon Ladder`: delay-discounting tradeoffs to estimate present bias.
-   - `Bilingual Adaptive Micro-Probes`: each AI-generated follow-up stores semantically aligned English and Simplified Chinese text for its title, rationale, prompts, and options, while the participant API returns only the selected language.
+   - `Bilingual Adaptive Micro-Probes`: each AI-generated follow-up combines a scenario choice, short completion, and original abstract-cue slider; it stores semantically aligned English and Simplified Chinese text while the participant API returns only the selected language.
 
 2. **Human-in-the-loop counselor workflow**
    - A dedicated counselor account can review participant cases, see the same evidence chain, send messages into the shared thread, and override strategy.
@@ -46,11 +46,24 @@ The first-stage `Life Preference Portrait` uses original, indirect scenario item
 - **Theory of Planned Behavior**: attitudes, perceived control, and social norms inform the social-check and recommendation-style options.
 - **Social support and interpersonal regulation research**: informs options where participants seek advice, co-regulation, or shared decision-making.
 
-The key research choice is to separate **surface content** from **latent scoring**. A participant sees ordinary questions such as birthday celebration style, travel packing, restaurant selection, or weekend recovery. The backend maps those choices to AgentIS dimensions: cue sensitivity, affect regulation, social influence, present-bias tendency, planning strength, and help readiness. After the first profile pass, the Worker dynamically orders the next tasks so the participant is guided to the most informative follow-up instead of seeing every module at once.
+The key research choice is to separate **surface content** from **latent scoring**. A participant sees ordinary questions such as birthday celebration style, travel packing, restaurant selection, or weekend recovery. The first-stage written continuations are preserved as qualitative evidence and do not themselves create a risk score; the eight structured choices map to AgentIS dimensions: cue sensitivity, affect regulation, social influence, present-bias tendency, planning strength, and help readiness. After the first profile pass, the Worker dynamically orders the next tasks so the participant is guided to the most informative follow-up instead of seeing every module at once.
 
 ## Adaptive Bilingual Task Protocol
 
-AI-generated follow-up tasks use stable option keys and metric mappings, while all participant-facing text is produced as an English/Simplified Chinese pair in one generation. The prototype rejects incomplete language pairs, preserves both versions in its generated-task record, and filters the task API response to the participant's selected language. It chooses two high-priority profile dimensions for each follow-up and rotates away from dimensions already targeted by earlier generated tasks, improving construct coverage across the five-task adaptive sequence. Research exports include the generated task text, focus dimensions, generation version, model identifier, and response language so the adaptive evidence chain can be audited later.
+AI-generated follow-up tasks contain exactly one `choice`, one `fill_blank`, and one `projective_slider` item. The prototype rejects incomplete language pairs, preserves both versions in its generated-task record, and filters the task API response to the participant's selected language. It chooses two high-priority profile dimensions for each follow-up, rotates away from dimensions already targeted by earlier generated tasks, and retains the approved source identifiers used for the task so the adaptive evidence chain can be audited later.
+
+### Adaptive Item Formats and Sources
+
+`projective_slider` presents an original, symmetric abstract cue card next to a consumption-relevant approach-versus-pause continuum. It is visually inspired by the broad use of ambiguous stimuli in psychological research, but it is **not a Rorschach test**: it does not reproduce Rorschach material, administer its procedure, use its norms, or make clinical or personality-diagnostic claims. It is an exploratory measure of a momentary approach/pause response, not a validated diagnostic instrument.
+
+The generator can cite only the following source identifiers, which are stored with the generated task:
+
+- `consumer_impulse` — Rook, D. W. (1987). *The Buying Impulse*. Journal of Consumer Research, 14(2), 189–199.
+- `impulse_buying_tendency` — Verplanken, B., & Herabadi, A. G. (2001). *Individual Differences in Impulse Buying Tendency: Feeling and No Thinking*. Journal of Economic Psychology, 22(1), 71–83.
+- `delay_discounting` — Kable, J. W., & Glimcher, P. W. (2007). *The Neural Correlates of Subjective Value During Intertemporal Choice*. Nature Neuroscience, 10, 1625–1633.
+- `ambiguous_stimulus` — McClelland, D. C., Koestner, R., & Weinberger, J. (1989). *How Do Self-Attributed and Implicit Motives Differ?* Psychological Review, 96(4), 690–702.
+
+Before the abstract-cue format is used for substantive research claims, validate it against established impulse-buying and self-regulation measures, assess test–retest reliability and language invariance, and obtain ethics approval appropriate to the study population.
 
 ## Stack
 

@@ -29,6 +29,29 @@ const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const SUPERADMIN_ID = "root";
 const AI_DYNAMIC_TASK_LIMIT = 5;
 const AI_DYNAMIC_TASK_PREFIX = "ai_dynamic:";
+const ADAPTIVE_SOURCE_CATALOG = [
+  {
+    id: "consumer_impulse",
+    citation: "Rook (1987), The Buying Impulse, Journal of Consumer Research.",
+    scope: "unplanned purchase urges and cue-triggered approach",
+  },
+  {
+    id: "impulse_buying_tendency",
+    citation: "Verplanken & Herabadi (2001), Individual Differences in Impulse Buying Tendency, Journal of Economic Psychology.",
+    scope: "affective and cognitive facets of impulse buying",
+  },
+  {
+    id: "delay_discounting",
+    citation: "Kable & Glimcher (2007), The Neural Correlates of Subjective Value During Intertemporal Choice, Nature Neuroscience.",
+    scope: "immediate versus delayed reward trade-offs",
+  },
+  {
+    id: "ambiguous_stimulus",
+    citation: "McClelland, Koestner, & Weinberger (1989), How Do Self-Attributed and Implicit Motives Differ?, Psychological Review.",
+    scope: "ambiguous-cue responses as exploratory, non-diagnostic evidence",
+  },
+];
+const ADAPTIVE_SOURCE_IDS = new Set(ADAPTIVE_SOURCE_CATALOG.map((source) => source.id));
 
 export default {
   async fetch(request, env) {
@@ -38,7 +61,17 @@ export default {
       if (url.pathname.startsWith("/api/")) {
         return await handleApi(request, env, url);
       }
-      return env.assets.fetch(request);
+      const assetResponse = await env.assets.fetch(request);
+      if (url.pathname === "/" || url.pathname.endsWith(".html")) {
+        const headers = new Headers(assetResponse.headers);
+        headers.set("cache-control", "no-cache");
+        return new Response(assetResponse.body, {
+          status: assetResponse.status,
+          statusText: assetResponse.statusText,
+          headers,
+        });
+      }
+      return assetResponse;
     } catch (error) {
       console.error(error);
       const status =
@@ -345,7 +378,7 @@ async function createAiDynamicTask({ env, userId, language, context, profile, ai
         riskScore: profile.risk_score,
         eventCount: context.events.length,
         focusMetrics,
-        generationVersion: task.research?.generationVersion || "bilingual-adaptive-v2",
+        generationVersion: task.research?.generationVersion || "bilingual-adaptive-v3",
         model: aiSettings.model,
       }),
       now,
@@ -375,6 +408,8 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
     "Every participant-facing text field must include semantically equivalent English and Simplified Chinese text.",
     "The English and Chinese versions must describe the same situation, choice meaning, and response scope.",
     "Do not translate or alter option keys, tags, metrics, or their ordering between languages.",
+    "The task must be research-oriented but is not a diagnosis or a standardized clinical test.",
+    "The projective_slider is an original abstract-cue response task, not a Rorschach test: do not use Rorschach images, norms, terminology, or clinical claims.",
     "Schema:",
     JSON.stringify({
       title_en: "short English task title",
@@ -383,6 +418,7 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
       description_zh: "对应的简体中文说明",
       theory_en: "one English sentence naming the behavioral construct indirectly probed",
       theory_zh: "对应的简体中文理论说明",
+      source_ids: ["consumer_impulse", "ambiguous_stimulus"],
       items: [
         {
           type: "choice",
@@ -421,12 +457,43 @@ async function generateAiDynamicTask({ taskKey, language, profile, events, aiSet
             help_readiness: 50,
           },
         },
+        {
+          type: "projective_slider",
+          prompt_en: "an indirect English prompt about an original abstract cue card and an unplanned consumption moment",
+          prompt_zh: "对应的简体中文题干",
+          stimulus_en: "short English label for the abstract symmetric cue card",
+          stimulus_zh: "对应的简体中文线索卡标签",
+          left_anchor_en: "a reflective, delay-oriented endpoint",
+          left_anchor_zh: "对应的反思/延迟端点",
+          right_anchor_en: "an immediate, approach-oriented endpoint",
+          right_anchor_zh: "对应的即时接近端点",
+          low_tag: "reflective_pause",
+          high_tag: "immediate_approach",
+          metrics_low: {
+            cue_drive: 25,
+            emotion_relief: 30,
+            social_pull: 35,
+            present_bias: 20,
+            planning_strength: 80,
+            help_readiness: 55,
+          },
+          metrics_high: {
+            cue_drive: 80,
+            emotion_relief: 70,
+            social_pull: 60,
+            present_bias: 82,
+            planning_strength: 25,
+            help_readiness: 30,
+          },
+        },
       ],
     }),
     "Produce exactly 3 items.",
-    "At least one item must be type fill_blank and at least one item must be type choice.",
+    "Produce exactly one choice, one fill_blank, and one projective_slider item.",
     "Choice items must have exactly 4 options with keys A, B, C, D.",
     "Fill_blank items must include both language placeholders, tag, and metrics. They must be answerable in one short sentence.",
+    "Projective_slider items must include the bilingual abstract-cue label and anchors, low_tag, high_tag, metrics_low, and metrics_high. It records an immediate approach-versus-pause position from 0 to 100; it must not make personality or clinical claims.",
+    `source_ids must contain one or two IDs from this catalog only: ${JSON.stringify(ADAPTIVE_SOURCE_CATALOG)}.`,
     "Reject the task yourself if any required English or Simplified Chinese text is missing.",
     "Each metrics value must be an integer from 0 to 100.",
   ].join("\n");
@@ -471,13 +538,7 @@ function normalizeGeneratedTaskData(data, taskKey, questionIndex, focusMetrics) 
   while (items.length < 3) {
     items.push(buildFallbackFillBlankItem(questionIndex, items.length));
   }
-
-  if (!items.some((item) => item.type === "fill_blank")) {
-    items[2] = buildFallbackFillBlankItem(questionIndex, 2);
-  }
-  if (!items.some((item) => item.type === "choice")) {
-    throw new Error("AI dynamic task must include at least one choice item.");
-  }
+  items = ensureGeneratedItemTypes(items, questionIndex);
 
   const title = requireBilingualText(data, "title", "AI dynamic task title");
   const description = requireBilingualText(data, "description", "AI dynamic task description");
@@ -495,9 +556,10 @@ function normalizeGeneratedTaskData(data, taskKey, questionIndex, focusMetrics) 
     theory_zh: theory.zh,
     aiGenerated: true,
     research: {
-      generationVersion: "bilingual-adaptive-v2",
+      generationVersion: "bilingual-adaptive-v3",
       focusMetrics: [...focusMetrics],
       questionIndex,
+      sourceIds: normalizeSourceIds(data.source_ids),
     },
     items,
   };
@@ -505,7 +567,8 @@ function normalizeGeneratedTaskData(data, taskKey, questionIndex, focusMetrics) 
 
 function normalizeGeneratedItem(item, index) {
   const prompt = requireBilingualText(item, "prompt", "AI dynamic item prompt");
-  const type = String(item?.type || "").toLowerCase() === "fill_blank" ? "fill_blank" : "choice";
+  const requestedType = String(item?.type || "").toLowerCase();
+  const type = ["choice", "fill_blank", "projective_slider"].includes(requestedType) ? requestedType : "choice";
   const base = {
     key: `q${index + 1}`,
     index: index + 1,
@@ -521,6 +584,25 @@ function normalizeGeneratedItem(item, index) {
       placeholder_zh: placeholder.zh.slice(0, 120),
       tag: cleanTag(item?.tag || `fill_blank_${index + 1}`),
       metrics: normalizeMetricMap(item?.metrics),
+    };
+  }
+
+  if (type === "projective_slider") {
+    const stimulus = requireBilingualText(item, "stimulus", "AI dynamic abstract cue label");
+    const leftAnchor = requireBilingualText(item, "left_anchor", "AI dynamic slider left anchor");
+    const rightAnchor = requireBilingualText(item, "right_anchor", "AI dynamic slider right anchor");
+    return {
+      ...base,
+      stimulus: stimulus.en.slice(0, 180),
+      stimulus_zh: stimulus.zh.slice(0, 180),
+      left_anchor: leftAnchor.en.slice(0, 120),
+      left_anchor_zh: leftAnchor.zh.slice(0, 120),
+      right_anchor: rightAnchor.en.slice(0, 120),
+      right_anchor_zh: rightAnchor.zh.slice(0, 120),
+      low_tag: cleanTag(item?.low_tag || `reflective_pause_${index + 1}`),
+      high_tag: cleanTag(item?.high_tag || `immediate_approach_${index + 1}`),
+      metrics_low: normalizeMetricMap(item?.metrics_low),
+      metrics_high: normalizeMetricMap(item?.metrics_high),
     };
   }
 
@@ -558,6 +640,59 @@ function buildFallbackFillBlankItem(questionIndex, index) {
   };
 }
 
+function ensureGeneratedItemTypes(items, questionIndex) {
+  const fallbackBuilders = {
+    choice: buildFallbackChoiceItem,
+    fill_blank: buildFallbackFillBlankItem,
+    projective_slider: buildFallbackProjectiveSliderItem,
+  };
+  for (const type of Object.keys(fallbackBuilders)) {
+    if (items.some((item) => item.type === type)) continue;
+    const replacementIndex = items.findIndex(
+      (candidate) => items.filter((item) => item.type === candidate.type).length > 1,
+    );
+    if (replacementIndex < 0) throw new Error(`AI dynamic task is missing required ${type} item.`);
+    items[replacementIndex] = fallbackBuilders[type](questionIndex, replacementIndex);
+  }
+  return items.map((item, index) => ({ ...item, key: `q${index + 1}`, index: index + 1 }));
+}
+
+function buildFallbackChoiceItem(questionIndex, index) {
+  return {
+    key: `q${index + 1}`,
+    index: index + 1,
+    type: "choice",
+    prompt: "An unexpected offer appears while you are doing something else. What would you notice first?",
+    prompt_zh: "当一个意外优惠在你做其他事情时出现，你最先会注意什么？",
+    options: [
+      { key: "A", label: "How little time seems left", label_zh: "看起来还剩多少时间", tag: "countdown", metrics: normalizeMetricMap({ cue_drive: 76, present_bias: 76, planning_strength: 26 }) },
+      { key: "B", label: "Whether it matches a plan I already made", label_zh: "它是否符合我已有的计划", tag: "planning", metrics: normalizeMetricMap({ cue_drive: 30, present_bias: 28, planning_strength: 82 }) },
+      { key: "C", label: "Whether it would change my mood right away", label_zh: "它能否立刻改变我的心情", tag: "mood_relief", metrics: normalizeMetricMap({ cue_drive: 66, emotion_relief: 74, present_bias: 66, planning_strength: 34 }) },
+      { key: "D", label: "Who else is talking about it", label_zh: "还有谁在谈论它", tag: "social_proof", metrics: normalizeMetricMap({ social_pull: 76, cue_drive: 52, planning_strength: 48 }) },
+    ],
+  };
+}
+
+function buildFallbackProjectiveSliderItem(questionIndex, index) {
+  return {
+    key: `q${index + 1}`,
+    index: index + 1,
+    type: "projective_slider",
+    prompt: "Look at this original abstract cue card as if it briefly appeared beside an unplanned offer. Place the marker where your first impulse would land.",
+    prompt_zh: "把这张原创抽象线索卡想象成短暂出现在一个计划外优惠旁边。请标出你第一反应会落在哪里。",
+    stimulus: "Symmetric abstract cue card",
+    stimulus_zh: "对称抽象线索卡",
+    left_anchor: "Pause and check what matters",
+    left_anchor_zh: "先停一下，核对真正重要的事",
+    right_anchor: "Move toward it now",
+    right_anchor_zh: "现在就靠近它",
+    low_tag: `reflective_pause_${questionIndex}`,
+    high_tag: `immediate_approach_${questionIndex}`,
+    metrics_low: normalizeMetricMap({ cue_drive: 24, emotion_relief: 30, social_pull: 36, present_bias: 20, planning_strength: 82, help_readiness: 56 }),
+    metrics_high: normalizeMetricMap({ cue_drive: 80, emotion_relief: 70, social_pull: 60, present_bias: 82, planning_strength: 24, help_readiness: 30 }),
+  };
+}
+
 function normalizeMetricMap(metrics) {
   return Object.fromEntries(
     METRIC_KEYS.map((key) => [key, clampMetric(metrics?.[key] ?? 50)]),
@@ -586,6 +721,9 @@ function publicGeneratedTask(task, language) {
       type: item.type || "choice",
       prompt: selectGeneratedText(item.prompt, item.prompt_zh, language),
       placeholder: selectGeneratedText(item.placeholder, item.placeholder_zh, language),
+      stimulus: selectGeneratedText(item.stimulus, item.stimulus_zh, language),
+      leftAnchor: selectGeneratedText(item.left_anchor, item.left_anchor_zh, language),
+      rightAnchor: selectGeneratedText(item.right_anchor, item.right_anchor_zh, language),
       options: (item.options || []).map((option) => ({
         key: option.key,
         label: selectGeneratedText(option.label, option.label_zh, language),
@@ -660,6 +798,14 @@ function cleanText(value) {
 
 function cleanTag(value) {
   return String(value || "").replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, "_").slice(0, 40) || "ai_generated";
+}
+
+function normalizeSourceIds(sourceIds) {
+  const normalized = Array.isArray(sourceIds)
+    ? sourceIds.map((sourceId) => String(sourceId || "").trim()).filter((sourceId) => ADAPTIVE_SOURCE_IDS.has(sourceId))
+    : [];
+  const deduplicated = [...new Set(normalized)].slice(0, 2);
+  return deduplicated.length ? deduplicated : ["consumer_impulse", "ambiguous_stimulus"];
 }
 
 function clampMetric(value) {

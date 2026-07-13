@@ -63,7 +63,7 @@ const UI_COPY = {
       counselor: "Invite the counselor to co-shape the intervention",
     },
     evidenceNotes: {
-      cue_triage: "Ten low-friction micro-choices",
+      cue_triage: "Eight micro-choices plus two short continuations",
       adaptive: "Adaptive test content",
       budget_arc: "Token allocation across reward and buffer jars",
       delay_ladder: "Delay-discounting preference ladder",
@@ -161,7 +161,7 @@ const UI_COPY = {
       counselor: "邀请顾问进入共同干预流程",
     },
     evidenceNotes: {
-      cue_triage: "10 个低压力微选择",
+      cue_triage: "8 个低压力微选择加 2 道短填空",
       adaptive: "动态测试内容",
       budget_arc: "奖励/缓冲预算分配活动",
       delay_ladder: "延迟折扣偏好阶梯",
@@ -286,24 +286,10 @@ const TASK_DEFINITIONS = {
         },
       },
       q9: {
-        options: {
-          A: { cue_drive: 78, emotion_relief: 36, social_pull: 28, present_bias: 74, planning_strength: 28, help_readiness: 26, tag: "countdown" },
-          B: { cue_drive: 36, emotion_relief: 28, social_pull: 24, present_bias: 34, planning_strength: 78, help_readiness: 34, tag: "reflection" },
-          C: { cue_drive: 34, emotion_relief: 26, social_pull: 22, present_bias: 30, planning_strength: 84, help_readiness: 36, tag: "buffer" },
-          D: { cue_drive: 58, emotion_relief: 46, social_pull: 28, present_bias: 58, planning_strength: 42, help_readiness: 28, tag: "mood_relief" },
-        },
+        type: "fill_blank",
       },
       q10: {
-        options: {
-          A: { cue_drive: 56, emotion_relief: 72, social_pull: 26, present_bias: 70, planning_strength: 34, help_readiness: 28, tag: "mood_relief" },
-          B: { cue_drive: 34, emotion_relief: 32, social_pull: 22, present_bias: 32, planning_strength: 78, help_readiness: 36, tag: "planning" },
-          C: { cue_drive: 38, emotion_relief: 34, social_pull: 24, present_bias: 34, planning_strength: 80, help_readiness: 36, tag: "buffer" },
-          D: { cue_drive: 46, emotion_relief: 32, social_pull: 68, present_bias: 42, planning_strength: 60, help_readiness: 66, tag: "support" },
-          E: { cue_drive: 58, emotion_relief: 72, social_pull: 30, present_bias: 66, planning_strength: 36, help_readiness: 28, tag: "mood_relief" },
-          F: { cue_drive: 32, emotion_relief: 28, social_pull: 26, present_bias: 28, planning_strength: 84, help_readiness: 36, tag: "planning" },
-          G: { cue_drive: 68, emotion_relief: 38, social_pull: 34, present_bias: 72, planning_strength: 32, help_readiness: 26, tag: "instant_reward" },
-          H: { cue_drive: 42, emotion_relief: 34, social_pull: 56, present_bias: 38, planning_strength: 64, help_readiness: 62, tag: "support" },
-        },
+        type: "fill_blank",
       },
     },
   },
@@ -326,7 +312,7 @@ const TASK_COPY = {
     cue_triage: {
       title: "Life Preference Portrait",
       description:
-        "Choose the option that feels most like you in ten everyday situations. There are no right answers.",
+        "Choose in eight everyday situations, then complete two short reflections. There are no right answers.",
       theory:
         "Maps ordinary preferences to latent self-regulation, reward sensitivity, affect regulation, social orientation, and planning constructs.",
       items: {
@@ -415,26 +401,12 @@ const TASK_COPY = {
           },
         },
         q9: {
-          prompt: "You receive a message saying a limited spot opened for an event you considered before.",
-          options: {
-            A: "Take the spot before it disappears.",
-            B: "Let it pass unless you already planned for it.",
-            C: "Check whether it fits your week before responding.",
-            D: "Ask someone whether they would join or recommend it.",
-          },
+          prompt: "Complete the sentence: when a limited-time offer or opportunity appears unexpectedly, the first thing I notice is ____.",
+          placeholder: "For example: the deadline, my budget, or whether I need it",
         },
         q10: {
-          prompt: "After a demanding week, you have an unplanned evening. What feels most restorative?",
-          options: {
-            A: "Choose something lively that changes your mood straight away.",
-            B: "Make the room quiet and leave the evening open.",
-            C: "Tidy a few loose ends so next week starts clearly.",
-            D: "Spend the evening with someone who knows you well.",
-            E: "Slow down with a warm drink and no demands.",
-            F: "Set one small rule for the evening and follow it.",
-            G: "Find a last-minute activity that gives the week a strong finish.",
-            H: "Message someone you trust and see whether they can talk.",
-          },
+          prompt: "Complete the sentence: after a tiring day, the quickest way I usually try to change my mood is ____.",
+          placeholder: "Write a short, honest answer",
         },
       },
     },
@@ -511,7 +483,7 @@ const TASK_COPY = {
     cue_triage: {
       title: "生活偏好画像",
       description:
-        "在 10 个日常情境里选择最像你的选项。没有标准答案。",
+        "在 8 个日常情境里选择最像你的选项，再补全 2 个简短反思。没有标准答案。",
       theory:
         "把普通生活偏好映射到自我调节、奖赏敏感、情绪调节、社会取向和计划性等潜在构念。",
       items: {
@@ -600,26 +572,12 @@ const TASK_COPY = {
           },
         },
         q9: {
-          prompt: "有人告诉你，之前考虑过的一个活动突然空出最后一个名额。",
-          options: {
-            A: "先把名额拿下，免得错过。",
-            B: "如果原本没安排，就让它过去。",
-            C: "先看它是否适合这一周的安排。",
-            D: "问问有没有人同行或推荐。",
-          },
+          prompt: "请补全：当一个限时优惠或机会突然出现时，我最先注意到的是 ____。",
+          placeholder: "例如：截止时间、预算，或我是否真的需要它",
         },
         q10: {
-          prompt: "忙碌的一周结束后，突然空出一个晚上。哪种方式最能让你恢复？",
-          options: {
-            A: "选择一件能立刻改变心情、很有活力的事。",
-            B: "把房间安静下来，什么都不安排。",
-            C: "收尾几件小事，让下周开始得更清楚。",
-            D: "和真正了解你的人一起度过晚上。",
-            E: "喝杯热饮，慢下来，不给自己任何要求。",
-            F: "给这个晚上定一条小规则，并照着做。",
-            G: "临时找个活动，为这一周画上有力的句号。",
-            H: "给信任的人发消息，看看能不能聊一会儿。",
-          },
+          prompt: "请补全：忙碌或疲惫的一天后，我通常最快用 ____ 来改变心情。",
+          placeholder: "写下一个简短、真实的答案",
         },
       },
     },
@@ -1169,6 +1127,23 @@ export function scoreGeneratedMicroTask(task, payload, language) {
       continue;
     }
 
+    if (item.type === "projective_slider") {
+      const position = Number(value);
+      if (!Number.isInteger(position) || position < 0 || position > 100) {
+        throw new TaskInputError(lang === "zh" ? "请在抽象线索卡上标出你的第一反应。" : "Please mark your first response on the abstract cue card.");
+      }
+      selections[item.key] = position;
+      const ratio = position / 100;
+      for (const key of METRIC_KEYS) {
+        const low = Number(item.metrics_low?.[key] ?? 50);
+        const high = Number(item.metrics_high?.[key] ?? 50);
+        metrics[key] += Math.round(low + (high - low) * ratio);
+      }
+      const tag = position >= 50 ? item.high_tag : item.low_tag;
+      if (tag) tags.add(tag);
+      continue;
+    }
+
     const option = (item.options || []).find((entry) => entry.key === value);
     if (!option) {
       throw new TaskInputError(lang === "zh" ? "请完成这道动态选择。" : "Please complete this generated choice.");
@@ -1319,8 +1294,10 @@ function buildCueTask(copy) {
     items: Object.entries(copy.items).map(([key, item], index) => ({
       key,
       index: index + 1,
+      type: TASK_DEFINITIONS.cue_triage.items[key]?.type || "choice",
       prompt: item.prompt,
-      options: Object.entries(item.options).map(([optionKey, label]) => ({
+      placeholder: item.placeholder,
+      options: Object.entries(item.options || {}).map(([optionKey, label]) => ({
         key: optionKey,
         label,
       })),
@@ -1616,18 +1593,29 @@ function scoreCueTask(payload, language) {
 
   const metrics = emptyMetricMap(0);
   const tags = new Set();
-  for (const [itemKey, optionKey] of Object.entries(selections)) {
-    if (!defs[itemKey].options[optionKey]) {
-      throw new Error(lang === "zh" ? "请完成全部 10 个选择" : "Please complete all 10 choices.");
+  let scoredItemCount = 0;
+  for (const [itemKey, value] of Object.entries(selections)) {
+    if (defs[itemKey].type === "fill_blank") {
+      const answer = value.replace(/\s+/g, " ").trim().slice(0, 500);
+      if (!answer) {
+        throw new Error(lang === "zh" ? "请完成最后两道填空题" : "Please complete the final two fill-in items.");
+      }
+      selections[itemKey] = answer;
+      continue;
     }
-    const option = defs[itemKey].options[optionKey];
+
+    if (!defs[itemKey].options[value]) {
+      throw new Error(lang === "zh" ? "请完成前八道选择题" : "Please complete the first eight choices.");
+    }
+    const option = defs[itemKey].options[value];
     for (const key of METRIC_KEYS) {
       metrics[key] += option[key];
     }
     tags.add(option.tag);
+    scoredItemCount += 1;
   }
 
-  const normalizedMetrics = normalizeAverages(metrics, itemKeys.length);
+  const normalizedMetrics = normalizeAverages(metrics, scoredItemCount);
   return {
     taskKey: "cue_triage",
     payload: selections,
