@@ -572,39 +572,31 @@ function requireBilingualText(value, field, label) {
 }
 
 function publicGeneratedTask(task, language) {
-  const title = localizeGeneratedText(task.title, task.title_zh, language);
-  const description = localizeGeneratedText(task.description, task.description_zh, language);
-  const theory = localizeGeneratedText(task.theory, task.theory_zh, language);
   return {
-    ...task,
-    title: title.primary,
-    titleSecondary: title.secondary,
-    description: description.primary,
-    descriptionSecondary: description.secondary,
-    theory: theory.primary,
-    theorySecondary: theory.secondary,
+    key: task.key,
+    kind: task.kind,
+    estimatedMinutes: task.estimatedMinutes,
+    title: selectGeneratedText(task.title, task.title_zh, language),
+    description: selectGeneratedText(task.description, task.description_zh, language),
+    theory: selectGeneratedText(task.theory, task.theory_zh, language),
+    aiGenerated: Boolean(task.aiGenerated),
     items: (task.items || []).map((item) => ({
       key: item.key,
       index: item.index,
       type: item.type || "choice",
-      prompt: localizeGeneratedText(item.prompt, item.prompt_zh, language).primary,
-      promptSecondary: localizeGeneratedText(item.prompt, item.prompt_zh, language).secondary,
-      placeholder: localizeGeneratedText(item.placeholder, item.placeholder_zh, language).primary,
-      placeholderSecondary: localizeGeneratedText(item.placeholder, item.placeholder_zh, language).secondary,
+      prompt: selectGeneratedText(item.prompt, item.prompt_zh, language),
+      placeholder: selectGeneratedText(item.placeholder, item.placeholder_zh, language),
       options: (item.options || []).map((option) => ({
         key: option.key,
-        label: localizeGeneratedText(option.label, option.label_zh, language).primary,
-        labelSecondary: localizeGeneratedText(option.label, option.label_zh, language).secondary,
+        label: selectGeneratedText(option.label, option.label_zh, language),
       })),
     })),
   };
 }
 
-function localizeGeneratedText(english, chinese, language) {
+function selectGeneratedText(english, chinese, language) {
   const isChinese = language === "zh";
-  const primary = cleanText(isChinese ? chinese || english : english || chinese);
-  const secondary = cleanText(isChinese ? english : chinese);
-  return { primary, secondary: secondary === primary ? "" : secondary };
+  return cleanText(isChinese ? chinese || english : english || chinese);
 }
 
 async function loadGeneratedTasks(env, userId) {

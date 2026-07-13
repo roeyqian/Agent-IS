@@ -12,7 +12,7 @@ The old app relied too heavily on direct conversation and questionnaire-like pro
    - `Life Preference Portrait`: 10 original everyday scenario choices instead of blunt self-report or shopping-specific prompts.
    - `Budget Arc`: token allocation across reward, comfort, social, buffer, and future jars.
    - `Horizon Ladder`: delay-discounting tradeoffs to estimate present bias.
-   - `Bilingual Adaptive Micro-Probes`: each AI-generated follow-up stores and presents semantically aligned English and Simplified Chinese text for its title, rationale, prompts, and options.
+   - `Bilingual Adaptive Micro-Probes`: each AI-generated follow-up stores semantically aligned English and Simplified Chinese text for its title, rationale, prompts, and options, while the participant API returns only the selected language.
 
 2. **Human-in-the-loop counselor workflow**
    - A dedicated counselor account can review participant cases, see the same evidence chain, send messages into the shared thread, and override strategy.
@@ -50,7 +50,7 @@ The key research choice is to separate **surface content** from **latent scoring
 
 ## Adaptive Bilingual Task Protocol
 
-AI-generated follow-up tasks use stable option keys and metric mappings, while all participant-facing text is produced as an English/Simplified Chinese pair in one generation. The prototype rejects incomplete language pairs rather than showing a one-language task. It chooses two high-priority profile dimensions for each follow-up and rotates away from dimensions already targeted by earlier generated tasks, improving construct coverage across the five-task adaptive sequence. Research exports include the generated task text, focus dimensions, generation version, model identifier, and response language so the adaptive evidence chain can be audited later.
+AI-generated follow-up tasks use stable option keys and metric mappings, while all participant-facing text is produced as an English/Simplified Chinese pair in one generation. The prototype rejects incomplete language pairs, preserves both versions in its generated-task record, and filters the task API response to the participant's selected language. It chooses two high-priority profile dimensions for each follow-up and rotates away from dimensions already targeted by earlier generated tasks, improving construct coverage across the five-task adaptive sequence. Research exports include the generated task text, focus dimensions, generation version, model identifier, and response language so the adaptive evidence chain can be audited later.
 
 ## Stack
 
