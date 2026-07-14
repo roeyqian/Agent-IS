@@ -1852,7 +1852,7 @@ function determineStage({ completedTaskCount, plan, riskScore, previousRisk }) {
 function buildTriggers(latestEvents, metrics, copy) {
   const tags = new Set();
   const cueTags = parseJson(latestEvents.cue_triage?.score_json || "{}", {}).tags || [];
-  cueTags.forEach((tag) => tags.add(tag));
+  cueTags.forEach((tag) => tags.add(localizeProfileTag(tag, copy)));
   if ((metrics.emotion_relief ?? 0) >= 70) tags.add(copy.triggerLabels.mood_relief);
   if ((metrics.social_pull ?? 0) >= 68) tags.add(copy.triggerLabels.social_proof);
   if ((metrics.present_bias ?? 0) >= 72) tags.add(copy.triggerLabels.instant_reward);
@@ -1953,18 +1953,25 @@ function inspectMessages(messages) {
 function summarizeTags(tags, language) {
   const lang = normalizeLanguage(language);
   const copy = getResearchCopy(lang);
-  return tags.map((tag) => {
-    if (tag === "countdown") return copy.triggerLabels.countdown;
-    if (tag === "mood_relief") return copy.triggerLabels.mood_relief;
-    if (tag === "social_proof") return copy.triggerLabels.social_proof;
-    if (tag === "recommendation") return copy.triggerLabels.recommendation;
-    if (tag === "instant_reward") return copy.triggerLabels.instant_reward;
-    if (tag === "buffer") return lang === "zh" ? "边界意识" : "Boundary awareness";
-    if (tag === "reflection") return lang === "zh" ? "反思停顿" : "Reflective pause";
-    if (tag === "planning") return lang === "zh" ? "计划取向" : "Planning orientation";
-    if (tag === "support") return lang === "zh" ? "支持取向" : "Support orientation";
-    return tag;
-  });
+  return tags.map((tag) => localizeProfileTag(tag, copy));
+}
+
+function localizeProfileTag(tag, copy) {
+  const value = String(tag || "");
+  const language = copy === UI_COPY.zh ? "zh" : "en";
+  const triggerKey = Object.keys(copy.triggerLabels).find((key) =>
+    Object.values(UI_COPY).some((item) => item.triggerLabels[key] === value),
+  );
+  if (triggerKey) return copy.triggerLabels[triggerKey];
+
+  const staticLabels = {
+    buffer: { en: "Boundary awareness", zh: "边界意识" },
+    reflection: { en: "Reflective pause", zh: "反思停顿" },
+    planning: { en: "Planning orientation", zh: "计划取向" },
+    support: { en: "Support orientation", zh: "支持取向" },
+  };
+  const staticKey = Object.keys(staticLabels).find((key) => Object.values(staticLabels[key]).includes(value) || key === value);
+  return staticKey ? staticLabels[staticKey][language] : value;
 }
 
 function summarizeBudgetTags(values, language) {

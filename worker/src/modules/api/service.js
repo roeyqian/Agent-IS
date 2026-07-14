@@ -1227,23 +1227,34 @@ export async function counselorCases(request, env, url) {
 
   const copy = getResearchCopy(language);
   return json({
-    users: (rows.results || []).map((row) => ({
-      id: row.id,
-      createdAt: row.created_at,
-      lastLoginAt: row.last_login_at,
-      summary: row.summary || copy.summaryPending,
-      riskScore: row.risk_score,
-      stage: row.stage || "orientation",
-      stageLabel: copy.stage[row.stage || "orientation"] || row.stage || "orientation",
-      status: row.status || "watch",
-      statusLabel: copy.status[row.status || "watch"] || row.status || "watch",
-      escalationLevel: row.escalation_level || "none",
-      aiReason: row.ai_reason || "",
-      counselorStrategy: row.counselor_strategy || "",
-      lastHumanMessageAt: row.last_human_message_at || null,
-      profileUpdatedAt: row.profile_updated_at || null,
-      taskCount: row.task_count || 0,
-      messageCount: row.message_count || 0,
+    users: await Promise.all((rows.results || []).map(async (row) => {
+      const context = await loadParticipantContext(env, row.id);
+      const profile = buildProfile({
+        events: context.events,
+        messages: context.messages.filter((item) => item.role === "user"),
+        careCase: context.careCase,
+        snapshots: context.snapshots,
+        language,
+      });
+
+      return {
+        id: row.id,
+        createdAt: row.created_at,
+        lastLoginAt: row.last_login_at,
+        summary: profile.summary || copy.summaryPending,
+        riskScore: profile.risk_score,
+        stage: profile.stage,
+        stageLabel: copy.stage[profile.stage] || profile.stage,
+        status: row.status || "watch",
+        statusLabel: copy.status[row.status || "watch"] || row.status || "watch",
+        escalationLevel: row.escalation_level || "none",
+        aiReason: row.ai_reason || "",
+        counselorStrategy: row.counselor_strategy || "",
+        lastHumanMessageAt: row.last_human_message_at || null,
+        profileUpdatedAt: row.profile_updated_at || null,
+        taskCount: row.task_count || 0,
+        messageCount: row.message_count || 0,
+      };
     })),
   });
 }
