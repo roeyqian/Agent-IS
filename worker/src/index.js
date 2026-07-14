@@ -29,6 +29,7 @@ const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const SUPERADMIN_ID = "root";
 const AI_DYNAMIC_TASK_LIMIT = 5;
 const AI_DYNAMIC_TASK_PREFIX = "ai_dynamic:";
+const AI_DYNAMIC_TASK_JOB_STALE_MS = 2 * 60 * 1000;
 const STIMULUS_IMAGE_PREFIX = "stimuli/free-association/";
 const ADAPTIVE_SOURCE_CATALOG = [
   {
@@ -85,6 +86,12 @@ export default {
         },
         status,
       );
+    }
+  },
+
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      await processGeneratedTaskJob(env, message);
     }
   },
 };
@@ -252,7 +259,7 @@ async function tasks(request, env, url) {
     language,
   });
   const aiSettings = await getUserAiSettings(env, user.id, true);
-  const taskCatalog = await buildParticipantTaskCatalog({
+  const { taskCatalog, dynamicAiGenerationPending } = await buildParticipantTaskCatalog({
     env,
     userId: user.id,
     language,
@@ -264,6 +271,7 @@ async function tasks(request, env, url) {
     tasks: taskCatalog,
     progress: buildTaskProgressForCatalog(taskCatalog, context.events, language),
     dynamicAiConfigured: Boolean(aiSettings.requestUrl && aiSettings.model && aiSettings.apiKey),
+    dynamicAiGenerationPending,
   });
 }
 
@@ -323,36 +331,122 @@ async function submitTask(request, env, taskKey) {
 async function buildParticipantTaskCatalog({ env, userId, language, context, profile, aiSettings }) {
   const baseTasks = getTaskCatalog(language, { events: context.events });
   const hasBaseline = context.events.some((event) => event.task_key === "cue_triage");
-  if (!hasBaseline) return baseTasks;
+  if (!hasBaseline) return { taskCatalog: baseTasks, dynamicAiGenerationPending: false };
 
   const generatedTasks = await ensureGeneratedTaskStimuli(env, userId, await loadGeneratedTasks(env, userId));
   const generatedCatalogTasks = generatedTasks.map((item) => publicGeneratedTask(item.task, language));
   const pending = generatedTasks.find((item) => item.status === "pending");
-  if (pending?.task) return [...baseTasks, ...generatedCatalogTasks];
+  if (pending?.task) {
+    return {
+      taskCatalog: [...baseTasks, ...generatedCatalogTasks],
+      dynamicAiGenerationPending: false,
+    };
+  }
 
   const completedDynamicCount = new Set(
     context.events
       .filter((event) => isAiDynamicTaskKey(event.task_key))
       .map((event) => event.task_key),
   ).size;
-  if (completedDynamicCount >= AI_DYNAMIC_TASK_LIMIT) return [...baseTasks, ...generatedCatalogTasks];
-  if (!aiSettings.requestUrl || !aiSettings.model || !aiSettings.apiKey) return [...baseTasks, ...generatedCatalogTasks];
+  if (completedDynamicCount >= AI_DYNAMIC_TASK_LIMIT || !aiSettings.requestUrl || !aiSettings.model || !aiSettings.apiKey) {
+    return {
+      taskCatalog: [...baseTasks, ...generatedCatalogTasks],
+      dynamicAiGenerationPending: false,
+    };
+  }
+
+  const questionIndex = completedDynamicCount + 1;
+  let job = await queueGeneratedTaskJob(env, userId, questionIndex);
+  if (job.queued) {
+    try {
+      await env.aiTaskQueue.send({ userId, language, questionIndex });
+    } catch (error) {
+      console.warn("Unable to queue AI dynamic task generation.", error);
+      await setGeneratedTaskJobStatus(
+        env,
+        userId,
+        questionIndex,
+        "failed",
+        String(error?.message || error).slice(0, 500),
+      );
+      job = { queued: false, pending: false };
+    }
+  }
+  return {
+    taskCatalog: [...baseTasks, ...generatedCatalogTasks],
+    dynamicAiGenerationPending: job.pending,
+  };
+}
+
+async function processGeneratedTaskJob(env, message) {
+  const userId = normalizeUserId(message.body?.userId);
+  const questionIndex = Number(message.body?.questionIndex);
+  const language = normalizeLanguage(message.body?.language);
+  if (!userId || !Number.isInteger(questionIndex) || questionIndex < 1) {
+    message.ack();
+    return;
+  }
+
+  const job = await getGeneratedTaskJob(env, userId, questionIndex);
+  if (job?.status !== "generating") {
+    message.ack();
+    return;
+  }
 
   try {
-    const task = await createAiDynamicTask({
+    const generatedTasks = await loadGeneratedTasks(env, userId);
+    if (generatedTasks.some((item) => item.status === "pending")) {
+      await setGeneratedTaskJobStatus(env, userId, questionIndex, "completed");
+      message.ack();
+      return;
+    }
+
+    const context = await loadParticipantContext(env, userId);
+    const completedDynamicCount = new Set(
+      context.events
+        .filter((event) => isAiDynamicTaskKey(event.task_key))
+        .map((event) => event.task_key),
+    ).size;
+    if (completedDynamicCount >= AI_DYNAMIC_TASK_LIMIT || questionIndex !== completedDynamicCount + 1) {
+      await setGeneratedTaskJobStatus(env, userId, questionIndex, "completed");
+      message.ack();
+      return;
+    }
+
+    const profile = buildProfile({
+      events: context.events,
+      messages: context.messages.filter((item) => item.role === "user"),
+      careCase: context.careCase,
+      snapshots: context.snapshots,
+      language,
+    });
+    const aiSettings = await getUserAiSettings(env, userId, true);
+    if (!aiSettings.requestUrl || !aiSettings.model || !aiSettings.apiKey) {
+      throw new Error("AI settings are incomplete.");
+    }
+
+    await createAiDynamicTask({
       env,
       userId,
       language,
       context,
       profile,
       aiSettings,
-      questionIndex: completedDynamicCount + 1,
+      questionIndex,
       priorGeneratedTasks: generatedTasks,
     });
-    return [...baseTasks, ...generatedCatalogTasks, publicGeneratedTask(task, language)];
+    await setGeneratedTaskJobStatus(env, userId, questionIndex, "completed");
+    message.ack();
   } catch (error) {
     console.warn("AI dynamic task generation failed.", error);
-    return [...baseTasks, ...generatedCatalogTasks];
+    try {
+      await setGeneratedTaskJobStatus(env, userId, questionIndex, "failed", String(error?.message || error).slice(0, 500));
+    } catch (jobError) {
+      console.error("Unable to record AI dynamic task generation failure.", jobError);
+      message.retry({ delaySeconds: 60 });
+      return;
+    }
+    message.ack();
   }
 }
 
@@ -889,6 +983,65 @@ async function loadGeneratedTasks(env, userId) {
       completedAt: row.completed_at || null,
     }))
     .filter((item) => item.task?.key);
+}
+
+async function queueGeneratedTaskJob(env, userId, questionIndex) {
+  const now = new Date().toISOString();
+  const result = await env.d1.prepare(
+    `INSERT INTO generated_task_jobs (user_id, question_index, status, error_message, created_at, updated_at)
+     VALUES (?, ?, 'generating', '', ?, ?)
+     ON CONFLICT(user_id, question_index) DO NOTHING`,
+  )
+    .bind(userId, questionIndex, now, now)
+    .run();
+  if (Number(result.meta?.changes || 0) > 0) {
+    return { queued: true, pending: true };
+  }
+
+  const job = await getGeneratedTaskJob(env, userId, questionIndex);
+  if (job?.status !== "generating" || !isGeneratedTaskJobStale(job.updatedAt)) {
+    return { queued: false, pending: job?.status === "generating" };
+  }
+
+  const reclaimed = await env.d1.prepare(
+    `UPDATE generated_task_jobs
+     SET error_message = '', updated_at = ?
+     WHERE user_id = ? AND question_index = ? AND status = 'generating' AND updated_at = ?`,
+  )
+    .bind(now, userId, questionIndex, job.updatedAt)
+    .run();
+  if (Number(reclaimed.meta?.changes || 0) > 0) {
+    return { queued: true, pending: true };
+  }
+
+  const currentJob = await getGeneratedTaskJob(env, userId, questionIndex);
+  return { queued: false, pending: currentJob?.status === "generating" };
+}
+
+function isGeneratedTaskJobStale(updatedAt) {
+  const timestamp = Date.parse(updatedAt || "");
+  return !Number.isFinite(timestamp) || Date.now() - timestamp >= AI_DYNAMIC_TASK_JOB_STALE_MS;
+}
+
+async function getGeneratedTaskJob(env, userId, questionIndex) {
+  const row = await env.d1.prepare(
+    "SELECT status, updated_at FROM generated_task_jobs WHERE user_id = ? AND question_index = ?",
+  )
+    .bind(userId, questionIndex)
+    .first();
+  if (!row) return null;
+  return {
+    status: row.status,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function setGeneratedTaskJobStatus(env, userId, questionIndex, status, errorMessage = "") {
+  await env.d1.prepare(
+    "UPDATE generated_task_jobs SET status = ?, error_message = ?, updated_at = ? WHERE user_id = ? AND question_index = ?",
+  )
+    .bind(status, errorMessage, new Date().toISOString(), userId, questionIndex)
+    .run();
 }
 
 async function getGeneratedTask(env, userId, taskKey) {

@@ -23,6 +23,8 @@ const state = {
   selectedCase: null,
   pendingGeneration: null,
   pendingChatMessage: "",
+  participantRefreshController: null,
+  taskGenerationPollId: null,
 };
 
 const elements = {
@@ -164,6 +166,11 @@ if (typeof prefersDarkQuery.addEventListener === "function") {
   prefersDarkQuery.addListener(handleSystemThemeChange);
 }
 
+window.addEventListener("pagehide", () => {
+  abortParticipantRefresh();
+  stopTaskGenerationPolling();
+});
+
 document.querySelectorAll(".tab").forEach((button) => {
   button.addEventListener("click", () => {
     state.mode = button.dataset.mode;
@@ -261,20 +268,37 @@ async function enterApp() {
 }
 
 async function refreshParticipant() {
-  const [historyResult, taskResult, insightResult, aiSettingsResult] = await Promise.all([
-    api("/history"),
-    api(`/tasks?language=${encodeURIComponent(state.language)}`),
-    api(`/insights?language=${encodeURIComponent(state.language)}`),
-    api("/ai-settings"),
-  ]);
-  const visibleTasks = (taskResult.tasks || []).filter(isVisibleTask);
-  const visibleTaskKeys = new Set(visibleTasks.map((task) => task.key));
-  state.messages = filterVisibleMessages(historyResult.messages || []);
-  state.tasks = visibleTasks;
-  state.taskProgress = (taskResult.progress || []).filter((item) => visibleTaskKeys.has(item.key));
-  state.insights = insightResult;
-  state.aiSettings = aiSettingsResult.settings || null;
-  renderParticipant();
+  abortParticipantRefresh();
+  const controller = new AbortController();
+  const token = state.token;
+  const language = state.language;
+  state.participantRefreshController = controller;
+
+  try {
+    const [historyResult, taskResult, insightResult, aiSettingsResult] = await Promise.all([
+      api("/history", { signal: controller.signal }),
+      api(`/tasks?language=${encodeURIComponent(language)}`, { signal: controller.signal }),
+      api(`/insights?language=${encodeURIComponent(language)}`, { signal: controller.signal }),
+      api("/ai-settings", { signal: controller.signal }),
+    ]);
+    if (controller.signal.aborted || state.token !== token || state.user?.isCounselor) return;
+
+    const visibleTasks = (taskResult.tasks || []).filter(isVisibleTask);
+    const visibleTaskKeys = new Set(visibleTasks.map((task) => task.key));
+    state.messages = filterVisibleMessages(historyResult.messages || []);
+    state.tasks = visibleTasks;
+    state.taskProgress = (taskResult.progress || []).filter((item) => visibleTaskKeys.has(item.key));
+    state.insights = insightResult;
+    state.aiSettings = aiSettingsResult.settings || null;
+    renderParticipant();
+    updateTaskGenerationState(Boolean(taskResult.dynamicAiGenerationPending));
+  } catch (error) {
+    if (!controller.signal.aborted && error.name !== "AbortError") throw error;
+  } finally {
+    if (state.participantRefreshController === controller) {
+      state.participantRefreshController = null;
+    }
+  }
 }
 
 function renderParticipant() {
@@ -380,6 +404,8 @@ async function createCounselorAccount(event) {
 }
 
 async function logout(options = {}) {
+  abortParticipantRefresh();
+  stopTaskGenerationPolling();
   try {
     if (!options.silent) await api("/logout", { method: "POST" });
   } catch {
@@ -396,6 +422,8 @@ async function logout(options = {}) {
   state.adminUsers = [];
   state.selectedCaseId = "";
   state.selectedCase = null;
+  state.pendingGeneration = null;
+  state.pendingChatMessage = "";
   localStorage.removeItem(TOKEN_KEY);
   elements.authView.classList.remove("hidden");
   elements.participantView.classList.add("hidden");
@@ -575,9 +603,8 @@ async function handleTaskSubmit(event) {
     });
     await refreshParticipant();
   } catch (error) {
-    alert(error.message);
-  } finally {
-    stopAiGeneration("task");
+    if (error.name !== "AbortError") alert(error.message);
+    scheduleTaskGenerationRefresh();
   }
 }
 
@@ -1455,6 +1482,7 @@ async function api(path, options = {}) {
     headers: { "content-type": "application/json" },
   };
   if (options.body) init.body = JSON.stringify(options.body);
+  if (options.signal) init.signal = options.signal;
   if (options.auth !== false && state.token) {
     init.headers.authorization = `Bearer ${state.token}`;
   }
@@ -1462,6 +1490,40 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || t("requestFailed"));
   return data;
+}
+
+function abortParticipantRefresh() {
+  state.participantRefreshController?.abort();
+  state.participantRefreshController = null;
+}
+
+function updateTaskGenerationState(isPending) {
+  if (isPending) {
+    startAiGeneration("task");
+    scheduleTaskGenerationRefresh();
+    return;
+  }
+  stopTaskGenerationPolling();
+  stopAiGeneration("task");
+}
+
+function scheduleTaskGenerationRefresh() {
+  if (state.taskGenerationPollId || !state.user || state.user.isCounselor) return;
+  state.taskGenerationPollId = window.setTimeout(async () => {
+    state.taskGenerationPollId = null;
+    if (!state.user || state.user.isCounselor) return;
+    try {
+      await refreshParticipant();
+    } catch (error) {
+      if (error.name !== "AbortError") scheduleTaskGenerationRefresh();
+    }
+  }, 1200);
+}
+
+function stopTaskGenerationPolling() {
+  if (!state.taskGenerationPollId) return;
+  window.clearTimeout(state.taskGenerationPollId);
+  state.taskGenerationPollId = null;
 }
 
 function setBusy(button, busy, busyText = "...") {
