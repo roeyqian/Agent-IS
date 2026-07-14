@@ -1,4 +1,4 @@
-/// <reference path="../worker-configuration.d.ts" />
+/// <reference path="../../worker-configuration.d.ts" />
 // @ts-nocheck
 
 import {
@@ -16,7 +16,7 @@ import {
   scoreGeneratedMicroTask,
   scoreTaskSubmission,
   summarizeTaskEvent,
-} from "./research.js";
+} from "../../research.js";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -55,98 +55,7 @@ const ADAPTIVE_SOURCE_CATALOG = [
 ];
 const ADAPTIVE_SOURCE_IDS = new Set(ADAPTIVE_SOURCE_CATALOG.map((source) => source.id));
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-
-    try {
-      if (url.pathname.startsWith("/api/")) {
-        return await handleApi(request, env, url);
-      }
-      const assetResponse = await env.assets.fetch(request);
-      if (url.pathname === "/" || url.pathname.endsWith(".html")) {
-        const headers = new Headers(assetResponse.headers);
-        headers.set("cache-control", "no-cache");
-        return new Response(assetResponse.body, {
-          status: assetResponse.status,
-          statusText: assetResponse.statusText,
-          headers,
-        });
-      }
-      return assetResponse;
-    } catch (error) {
-      console.error(error);
-      const status =
-        typeof error === "object" && error && "status" in error
-          ? Number(error.status) || 500
-          : 500;
-      return json(
-        {
-          error: status === 500 ? "Server processing failed" : String(error.message || error),
-        },
-        status,
-      );
-    }
-  },
-
-  async queue(batch, env) {
-    for (const message of batch.messages) {
-      await processGeneratedTaskJob(env, message);
-    }
-  },
-};
-
-async function handleApi(request, env, url) {
-  if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-
-  const route = `${request.method} ${url.pathname}`;
-  const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
-  const stimulusImageMatch = url.pathname.match(/^\/api\/stimuli\/([0-9a-f-]{36})$/i);
-  const counselorCaseMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)$/);
-  const counselorMessageMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)\/message$/);
-  const counselorStrategyMatch = url.pathname.match(/^\/api\/counselor\/users\/([^/]+)\/strategy$/);
-  const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
-
-  if (route === "POST /api/register") return register(request, env);
-  if (route === "POST /api/login") return login(request, env);
-  if (route === "POST /api/logout") return logout(request, env);
-  if (route === "POST /api/change-password") return changePassword(request, env);
-  if (route === "GET /api/me") return me(request, env);
-  if (route === "GET /api/history") return history(request, env);
-  if (route === "POST /api/chat") return chat(request, env);
-  if (route === "GET /api/tasks") return tasks(request, env, url);
-  if (request.method === "GET" && stimulusImageMatch) {
-    return serveStimulusImage(env, stimulusImageMatch[1].toLowerCase());
-  }
-  if (request.method === "POST" && taskMatch) {
-    return submitTask(request, env, decodeURIComponent(taskMatch[1]));
-  }
-  if (route === "POST /api/help") return askCounselorHelp(request, env);
-  if (route === "GET /api/insights") return insights(request, env, url);
-  if (route === "GET /api/research-export") return researchExport(request, env, url);
-  if (route === "GET /api/ai-settings") return getAiSettings(request, env);
-  if (route === "PUT /api/ai-settings") return saveAiSettings(request, env);
-
-  if (route === "GET /api/counselor/cases") return counselorCases(request, env, url);
-  if (request.method === "GET" && counselorCaseMatch) {
-    return counselorUserCase(request, env, decodeURIComponent(counselorCaseMatch[1]), url);
-  }
-  if (request.method === "POST" && counselorMessageMatch) {
-    return counselorMessage(request, env, decodeURIComponent(counselorMessageMatch[1]));
-  }
-  if (request.method === "PUT" && counselorStrategyMatch) {
-    return counselorStrategy(request, env, decodeURIComponent(counselorStrategyMatch[1]));
-  }
-  if (route === "GET /api/admin/users") return adminUsers(request, env, url);
-  if (route === "POST /api/admin/users") return createAdminUser(request, env);
-  if (request.method === "DELETE" && adminUserMatch) {
-    return deleteAdminUser(request, env, decodeURIComponent(adminUserMatch[1]));
-  }
-
-  return json({ error: "API not found" }, 404);
-}
-
-async function register(request, env) {
+export async function register(request, env) {
   const body = await readJson(request);
   const userId = normalizeUserId(body.userId);
   const password = String(body.password || "");
@@ -173,7 +82,7 @@ async function register(request, env) {
   return json({ user: publicUser({ id: userId, role }, env), token: session.token, expiresAt: session.expiresAt }, 201);
 }
 
-async function login(request, env) {
+export async function login(request, env) {
   const body = await readJson(request);
   const userId = normalizeUserId(body.userId);
   const password = String(body.password || "");
@@ -199,13 +108,13 @@ async function login(request, env) {
   return json({ user: publicUser(user, env), token: session.token, expiresAt: session.expiresAt });
 }
 
-async function logout(request, env) {
+export async function logout(request, env) {
   const token = readBearerToken(request);
   if (token) await env.kv.delete(sessionKey(token));
   return json({ ok: true });
 }
 
-async function changePassword(request, env) {
+export async function changePassword(request, env) {
   const user = await requireUser(request, env);
   const body = await readJson(request);
   const currentPassword = String(body.currentPassword || "");
@@ -236,18 +145,18 @@ async function changePassword(request, env) {
   return json({ ok: true });
 }
 
-async function me(request, env) {
+export async function me(request, env) {
   const user = await requireUser(request, env);
   return json({ user: publicUser(user, env) });
 }
 
-async function history(request, env) {
+export async function history(request, env) {
   const user = await requireParticipant(request, env);
   const messages = await loadMessages(env, user.id, 120);
   return json({ messages });
 }
 
-async function tasks(request, env, url) {
+export async function tasks(request, env, url) {
   const user = await requireParticipant(request, env);
   const language = normalizeLanguage(url.searchParams.get("language"));
   const context = await loadParticipantContext(env, user.id);
@@ -275,7 +184,7 @@ async function tasks(request, env, url) {
   });
 }
 
-async function submitTask(request, env, taskKey) {
+export async function submitTask(request, env, taskKey) {
   const user = await requireParticipant(request, env);
   const body = await readJson(request);
   const language = normalizeLanguage(body.language);
@@ -378,7 +287,7 @@ async function buildParticipantTaskCatalog({ env, userId, language, context, pro
   };
 }
 
-async function processGeneratedTaskJob(env, message) {
+export async function processGeneratedTaskJob(env, message) {
   const userId = normalizeUserId(message.body?.userId);
   const questionIndex = Number(message.body?.questionIndex);
   const language = normalizeLanguage(message.body?.language);
@@ -885,7 +794,7 @@ async function attachProjectiveStimulusImage(env, task) {
   }
 }
 
-async function serveStimulusImage(env, imageId) {
+export async function serveStimulusImage(env, imageId) {
   const image = await env.r2.get(stimulusImageObjectKey(imageId));
   if (!image) return new Response("Not found", { status: 404 });
   return new Response(image.body, {
@@ -1120,7 +1029,7 @@ function selectAdaptiveFocusMetrics(profile, priorGeneratedTasks) {
   return (unseen.length >= 2 ? unseen : candidates).slice(0, 2).map((candidate) => candidate.key);
 }
 
-async function askCounselorHelp(request, env) {
+export async function askCounselorHelp(request, env) {
   const user = await requireParticipant(request, env);
   const body = await readJson(request);
   const language = normalizeLanguage(body.language);
@@ -1140,7 +1049,7 @@ async function askCounselorHelp(request, env) {
   return json({ ok: true, profile: derived.profile, careCase: derived.careCase });
 }
 
-async function chat(request, env) {
+export async function chat(request, env) {
   const user = await requireParticipant(request, env);
   const body = await readJson(request);
   const language = normalizeLanguage(body.language);
@@ -1198,7 +1107,7 @@ async function chat(request, env) {
   });
 }
 
-async function insights(request, env, url) {
+export async function insights(request, env, url) {
   const user = await requireParticipant(request, env);
   const language = normalizeLanguage(url.searchParams.get("language"));
   const context = await loadParticipantContext(env, user.id);
@@ -1236,7 +1145,7 @@ async function insights(request, env, url) {
   });
 }
 
-async function researchExport(request, env, url) {
+export async function researchExport(request, env, url) {
   const user = await requireParticipant(request, env);
   const language = normalizeLanguage(url.searchParams.get("language"));
   const detail = await buildParticipantCase(env, user.id, language);
@@ -1252,13 +1161,13 @@ async function researchExport(request, env, url) {
   });
 }
 
-async function getAiSettings(request, env) {
+export async function getAiSettings(request, env) {
   const user = await requireParticipant(request, env);
   const settings = await getUserAiSettings(env, user.id, true);
   return json({ settings });
 }
 
-async function saveAiSettings(request, env) {
+export async function saveAiSettings(request, env) {
   const user = await requireParticipant(request, env);
   const body = await readJson(request);
   const existing = await getUserAiSettings(env, user.id, true);
@@ -1287,7 +1196,7 @@ async function saveAiSettings(request, env) {
   return json({ settings: sanitizeAiSettings({ requestUrl, model, apiKey, updatedAt: now }, true) });
 }
 
-async function counselorCases(request, env, url) {
+export async function counselorCases(request, env, url) {
   await requireCounselor(request, env);
   const language = normalizeLanguage(url.searchParams.get("language"));
   const rows = await env.d1.prepare(
@@ -1339,7 +1248,7 @@ async function counselorCases(request, env, url) {
   });
 }
 
-async function counselorUserCase(request, env, userId, url) {
+export async function counselorUserCase(request, env, userId, url) {
   await requireCounselor(request, env);
   const normalized = normalizeUserId(userId);
   if (!normalized) return json({ error: "Invalid user ID." }, 400);
@@ -1348,7 +1257,7 @@ async function counselorUserCase(request, env, userId, url) {
   return json(detail);
 }
 
-async function counselorMessage(request, env, userId) {
+export async function counselorMessage(request, env, userId) {
   await requireCounselor(request, env);
   const normalized = normalizeUserId(userId);
   if (!normalized) return json({ error: "Invalid user ID." }, 400);
@@ -1372,7 +1281,7 @@ async function counselorMessage(request, env, userId) {
   return counselorUserCase(request, env, normalized, new URL(`${request.url}?language=${language}`));
 }
 
-async function counselorStrategy(request, env, userId) {
+export async function counselorStrategy(request, env, userId) {
   await requireCounselor(request, env);
   const normalized = normalizeUserId(userId);
   if (!normalized) return json({ error: "Invalid user ID." }, 400);
@@ -1409,7 +1318,7 @@ async function counselorStrategy(request, env, userId) {
   return counselorUserCase(request, env, normalized, new URL(`${request.url}?language=${language}`));
 }
 
-async function adminUsers(request, env, url) {
+export async function adminUsers(request, env, url) {
   await requireSuperAdmin(request, env);
   const language = normalizeLanguage(url.searchParams.get("language"));
   const rows = await env.d1.prepare(
@@ -1451,7 +1360,7 @@ async function adminUsers(request, env, url) {
   });
 }
 
-async function createAdminUser(request, env) {
+export async function createAdminUser(request, env) {
   await requireSuperAdmin(request, env);
   const body = await readJson(request);
   const userId = normalizeUserId(body.userId);
@@ -1481,7 +1390,7 @@ async function createAdminUser(request, env) {
   return json({ user: publicUser({ id: userId, role, created_at: now, last_login_at: now }, env) }, 201);
 }
 
-async function deleteAdminUser(request, env, userId) {
+export async function deleteAdminUser(request, env, userId) {
   await requireSuperAdmin(request, env);
   const normalized = normalizeUserId(userId);
   if (!normalized) return json({ error: "Invalid user ID." }, 400);

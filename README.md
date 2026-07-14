@@ -85,12 +85,28 @@ view/
   assets/
 
 worker/
-  src/index.js
+  src/app/index.js
+  src/app/http.js
+  src/app/routes.js
+  src/modules/
+    auth/          # session and account access
+    participant/   # chat, tasks, insights, AI settings
+    counselor/     # care cases and human intervention
+    admin/         # user administration
+    public/        # public stimulus resources
+    api/service.js # application services and persistence orchestration
   src/research.js
-  src/migrations/0001_init.sql
+  src/migrations/
   wrangler.jsonc
   package.json
 ```
+
+The Worker follows an application / HTTP / module-route structure. `app/index.js`
+owns Cloudflare Worker events, `app/http.js` owns routing and API error handling,
+and each domain module owns its route registration and service facade. The shared
+application service keeps the existing research workflows and storage operations
+behind those module boundaries, so new domains can be added without expanding the
+Worker entry point.
 
 ## Fresh Cloudflare Resources
 
